@@ -1,0 +1,30 @@
+[project]
+name = "prinfo"
+version = "0.1.0"
+description = "CLI app to export GitHub PR check logs using gh"
+readme = "README.md"
+authors = [
+    { name = "s2005", email = "s2005@users.noreply.github.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv>=1.0.1",
+]
+
+[project.scripts]
+prinfo = "prinfo.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = [
+    "src",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

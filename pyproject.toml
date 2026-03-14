@@ -17,6 +17,7 @@ prinfo = "prinfo.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
+    "ruff>=0.15.6",
 ]
 
 [tool.pytest.ini_options]
@@ -24,6 +25,9 @@ addopts = "-q"
 pythonpath = [
     "src",
 ]
+
+[tool.ruff]
+target-version = "py311"
 
 [build-system]
 requires = ["hatchling"]

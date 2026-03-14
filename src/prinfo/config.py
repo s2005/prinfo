@@ -20,6 +20,8 @@ class AppConfig:
     repo: str | None
     output_dir: Path
     skip_empty_logs: bool
+    export_commit_files: bool
+    skip_check_logs: bool
     env_file: Path | None
     gh_host: str
     gh_token: str | None
@@ -40,6 +42,18 @@ def resolve_config(args, environ: Mapping[str, str] | None = None) -> AppConfig:
         default_path=Path("artifacts") / f"pr-{pr_number}",
     )
     skip_empty_logs = bool(getattr(args, "skip_empty_logs", False))
+    export_commit_files = _resolve_bool(
+        cli_value=getattr(args, "export_commit_files", False),
+        env_value=env_values.get("PRINFO_EXPORT_COMMIT_FILES"),
+    )
+    skip_check_logs = _resolve_bool(
+        cli_value=getattr(args, "skip_check_logs", False),
+        env_value=env_values.get("PRINFO_SKIP_CHECK_LOGS"),
+    )
+    if skip_check_logs and not export_commit_files:
+        raise ConfigurationError(
+            "--skip-check-logs requires --export-commit-files or PRINFO_EXPORT_COMMIT_FILES=true."
+        )
     gh_host = _resolve_str(args.gh_host, env_values.get("PRINFO_GH_HOST")) or "github.com"
     gh_token = _resolve_str(args.gh_token, env_values.get("PRINFO_GH_TOKEN"))
     gh_config_dir_value = _resolve_str(args.gh_config_dir, env_values.get("PRINFO_GH_CONFIG_DIR"))
@@ -51,6 +65,8 @@ def resolve_config(args, environ: Mapping[str, str] | None = None) -> AppConfig:
         repo=repo,
         output_dir=output_dir,
         skip_empty_logs=skip_empty_logs,
+        export_commit_files=export_commit_files,
+        skip_check_logs=skip_check_logs,
         env_file=env_file,
         gh_host=gh_host,
         gh_token=gh_token,
@@ -104,3 +120,13 @@ def _resolve_str(cli_value: str | None, env_value: str | None) -> str | None:
     if env_value is not None and env_value != "":
         return env_value
     return None
+
+
+def _resolve_bool(cli_value: bool, env_value: str | None) -> bool:
+    if cli_value:
+        return True
+    if env_value is None:
+        return False
+
+    normalized = env_value.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}

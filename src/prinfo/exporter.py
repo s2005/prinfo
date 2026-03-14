@@ -4,17 +4,17 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from prinfo.config import AppConfig
-from prinfo.gh import CheckRun, GhCli, GhCliError, parse_repo_ref
+from prinfo.gh import CheckRun, CommitDetails, CommitFile, GhCli, GhCliError, parse_repo_ref
 
 LOGGER = logging.getLogger(__name__)
 FILENAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class ExportError(RuntimeError):
-    """Raised when PR log export cannot complete."""
+    """Raised when PR export cannot complete."""
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,17 @@ class ExportResult:
     exported_logs: int
     manifest_only_logs: int
     skipped_checks: int
+
+
+@dataclass(frozen=True)
+class CommitExportResult:
+    repo: str
+    pr_number: int
+    output_dir: Path
+    manifest_path: Path
+    commit_count: int
+    exported_files: int
+    skipped_files: int
 
 
 def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
@@ -136,6 +147,59 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
     )
 
 
+def export_pr_commit_files(config: AppConfig, gh: GhCli) -> CommitExportResult:
+    gh.ensure_available()
+
+    repo_name = config.repo or gh.detect_repo()
+    repo_ref = parse_repo_ref(repo_name, config.gh_host)
+    commits = gh.list_pr_commits(repo_ref.full_name, config.pr_number)
+    if not commits:
+        raise ExportError(f"No commits were found for PR #{config.pr_number} in {repo_ref.full_name}.")
+
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+    commits_dir = config.output_dir / "commits"
+    commits_dir.mkdir(parents=True, exist_ok=True)
+
+    commit_records: list[dict[str, object]] = []
+    exported_files = 0
+    skipped_files = 0
+
+    for commit in commits:
+        LOGGER.info("Exporting files for commit %s (%s)", commit.short_sha, commit.message_headline)
+        details = gh.get_commit_details(repo_ref, commit.sha)
+        commit_result = _export_commit_folder(
+            output_dir=config.output_dir,
+            commits_dir=commits_dir,
+            details=details,
+            gh=gh,
+            repo_ref=repo_ref,
+        )
+        exported_files += commit_result["exported_files"]
+        skipped_files += commit_result["skipped_files"]
+        commit_records.append(commit_result["record"])
+
+    manifest_path = config.output_dir / "commits-manifest.json"
+    manifest = {
+        "repo": repo_ref.full_name,
+        "pr_number": config.pr_number,
+        "commit_count": len(commits),
+        "exported_files": exported_files,
+        "skipped_files": skipped_files,
+        "commits": commit_records,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return CommitExportResult(
+        repo=repo_ref.full_name,
+        pr_number=config.pr_number,
+        output_dir=config.output_dir,
+        manifest_path=manifest_path,
+        commit_count=len(commits),
+        exported_files=exported_files,
+        skipped_files=skipped_files,
+    )
+
+
 def build_log_filename(index: int, check: CheckRun) -> str:
     workflow = slugify(check.workflow_name or "workflow")
     check_name = slugify(check.name)
@@ -146,6 +210,117 @@ def build_log_filename(index: int, check: CheckRun) -> str:
 def slugify(value: str) -> str:
     sanitized = FILENAME_SANITIZE_RE.sub("-", value.strip()).strip("-")
     return sanitized.lower() or "check"
+
+
+def _export_commit_folder(
+    *,
+    output_dir: Path,
+    commits_dir: Path,
+    details: CommitDetails,
+    gh: GhCli,
+    repo_ref,
+) -> dict[str, object]:
+    commit_dir = commits_dir / details.commit.sha
+    commit_dir.mkdir(parents=True, exist_ok=True)
+
+    exported: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+
+    for file in details.files:
+        if not file.path:
+            skipped.append(
+                _skipped_commit_file_record(
+                    file=file,
+                    reason="file path missing from commit payload",
+                    reason_code="missing_path",
+                )
+            )
+            continue
+
+        if file.status == "removed":
+            LOGGER.info(
+                "Skipping removed file '%s' for commit %s because it cannot be downloaded at that revision.",
+                file.path,
+                details.commit.short_sha,
+            )
+            skipped.append(
+                _skipped_commit_file_record(
+                    file=file,
+                    reason="file was removed in this commit",
+                    reason_code="removed",
+                )
+            )
+            continue
+
+        try:
+            file_bytes = gh.download_commit_file(repo_ref, file.path, details.commit.sha)
+        except GhCliError as exc:
+            LOGGER.warning(
+                "Skipping file '%s' for commit %s: %s",
+                file.path,
+                details.commit.short_sha,
+                exc,
+            )
+            skipped.append(
+                _skipped_commit_file_record(
+                    file=file,
+                    reason=str(exc),
+                    reason_code="download_failed",
+                )
+            )
+            continue
+
+        target_path = commit_dir / _sanitize_repo_relative_path(file.path)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(file_bytes)
+        exported.append(
+            _exported_commit_file_record(
+                output_dir=output_dir,
+                file=file,
+                path=target_path,
+                bytes_written=len(file_bytes),
+            )
+        )
+
+    commit_manifest_path = commit_dir / "_commit.json"
+    commit_manifest = {
+        "commit": asdict(details.commit),
+        "exported": exported,
+        "skipped": skipped,
+    }
+    commit_manifest_path.write_text(json.dumps(commit_manifest, indent=2), encoding="utf-8")
+
+    return {
+        "exported_files": len(exported),
+        "skipped_files": len(skipped),
+        "record": {
+            "commit": asdict(details.commit),
+            "folder": _relative_manifest_path(output_dir=output_dir, path=commit_dir),
+            "manifest_path": _relative_manifest_path(output_dir=output_dir, path=commit_manifest_path),
+            "exported_files": len(exported),
+            "skipped_files": len(skipped),
+        },
+    }
+
+
+def _sanitize_repo_relative_path(repo_path: str) -> Path:
+    raw_path = PurePosixPath(repo_path)
+    safe_parts: list[str] = []
+    for part in raw_path.parts:
+        if part in {"", ".", "/"}:
+            continue
+        if part == "..":
+            safe_parts.append("_parent")
+            continue
+        safe_parts.append(part)
+
+    if not safe_parts:
+        safe_parts.append("file")
+    return Path(*safe_parts)
+
+
+def _relative_manifest_path(*, output_dir: Path, path: Path) -> str:
+    return path.relative_to(output_dir).as_posix()
 
 
 def _exported_record(
@@ -175,6 +350,43 @@ def _skipped_record(*, check: CheckRun, reason: str, reason_code: str) -> dict[s
         "status": check.status,
         "conclusion": check.conclusion,
         "has_log_content": False,
+        "reason_code": reason_code,
+        "reason": reason,
+    }
+
+
+def _exported_commit_file_record(
+    *,
+    output_dir: Path,
+    file: CommitFile,
+    path: Path,
+    bytes_written: int,
+) -> dict[str, object]:
+    return {
+        "path": _relative_manifest_path(output_dir=output_dir, path=path),
+        "bytes": bytes_written,
+        "status": file.status,
+        "additions": file.additions,
+        "deletions": file.deletions,
+        "changes": file.changes,
+        "previous_path": file.previous_path,
+        "source_path": file.path,
+    }
+
+
+def _skipped_commit_file_record(
+    *,
+    file: CommitFile,
+    reason: str,
+    reason_code: str,
+) -> dict[str, object]:
+    return {
+        "path": file.path,
+        "status": file.status,
+        "additions": file.additions,
+        "deletions": file.deletions,
+        "changes": file.changes,
+        "previous_path": file.previous_path,
         "reason_code": reason_code,
         "reason": reason,
     }

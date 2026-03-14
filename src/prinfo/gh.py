@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from typing import Callable, Sequence
+from urllib.parse import quote
 
 JOB_URL_RE = re.compile(
     r"^https://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)/actions/runs/(?P<run_id>\d+)(?:/job/(?P<job_id>\d+))?"
@@ -29,6 +30,33 @@ class CheckRun:
     check_type: str
     run_id: int | None
     job_id: int | None
+
+
+@dataclass(frozen=True)
+class PrCommit:
+    sha: str
+    short_sha: str
+    message_headline: str
+    message: str
+    authored_date: str | None
+    committed_date: str | None
+    url: str | None
+
+
+@dataclass(frozen=True)
+class CommitFile:
+    path: str
+    status: str
+    additions: int
+    deletions: int
+    changes: int
+    previous_path: str | None
+
+
+@dataclass(frozen=True)
+class CommitDetails:
+    commit: PrCommit
+    files: list[CommitFile]
 
 
 @dataclass(frozen=True)
@@ -100,6 +128,39 @@ class GhCli:
 
         return checks
 
+    def list_pr_commits(self, repo: str, pr_number: int) -> list[PrCommit]:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        endpoint = f"repos/{repo_ref.owner}/{repo_ref.name}/pulls/{pr_number}/commits"
+        commit_pages = self._run_paginated_json(host=repo_ref.host, endpoint=endpoint)
+
+        commits: list[PrCommit] = []
+        for raw_commit in commit_pages:
+            commits.append(_parse_pr_commit(raw_commit))
+        return commits
+
+    def get_commit_details(self, repo: RepoRef, sha: str) -> CommitDetails:
+        endpoint = f"repos/{repo.owner}/{repo.name}/commits/{sha}"
+        detail_pages = self._run_paginated_json(host=repo.host, endpoint=endpoint)
+        if not detail_pages:
+            raise GhCliError(f"No commit details were returned for {repo.full_name}@{sha}.")
+
+        commit = _parse_pr_commit(detail_pages[0])
+        files: list[CommitFile] = []
+        for raw_page in detail_pages:
+            for raw_file in raw_page.get("files") or []:
+                files.append(
+                    CommitFile(
+                        path=str(raw_file.get("filename") or ""),
+                        status=str(raw_file.get("status") or "unknown"),
+                        additions=int(raw_file.get("additions") or 0),
+                        deletions=int(raw_file.get("deletions") or 0),
+                        changes=int(raw_file.get("changes") or 0),
+                        previous_path=raw_file.get("previous_filename"),
+                    )
+                )
+
+        return CommitDetails(commit=commit, files=files)
+
     def download_job_log(self, repo: RepoRef, job_id: int) -> str:
         command = [
             "api",
@@ -111,14 +172,86 @@ class GhCli:
         ]
         return self._run_text(command)
 
-    def _run_json(self, args: Sequence[str]) -> dict:
+    def download_commit_file(self, repo: RepoRef, file_path: str, ref: str) -> bytes:
+        encoded_path = quote(file_path, safe="/")
+        encoded_ref = quote(ref, safe="")
+        command = [
+            "api",
+            "--hostname",
+            repo.host,
+            "-H",
+            "Accept: application/vnd.github.raw",
+            f"repos/{repo.owner}/{repo.name}/contents/{encoded_path}?ref={encoded_ref}",
+        ]
+        return self._run_bytes(command)
+
+    def _run_paginated_json(self, *, host: str, endpoint: str) -> list[dict[str, object]]:
+        data = self._run_json_value(
+            [
+                "api",
+                "--hostname",
+                host,
+                "--paginate",
+                "--slurp",
+                "-H",
+                "Accept: application/vnd.github+json",
+                endpoint,
+            ]
+        )
+        if not isinstance(data, list):
+            raise GhCliError(
+                f"Expected paginated JSON array from gh for endpoint {endpoint!r}, got {type(data).__name__}."
+            )
+
+        items: list[dict[str, object]] = []
+        for page in data:
+            if isinstance(page, dict):
+                items.append(page)
+                continue
+            if not isinstance(page, list):
+                raise GhCliError(
+                    f"Expected gh page data to be an object or array for endpoint {endpoint!r}, "
+                    f"got {type(page).__name__}."
+                )
+            for entry in page:
+                if not isinstance(entry, dict):
+                    raise GhCliError(
+                        f"Expected gh page entry to be an object for endpoint {endpoint!r}, "
+                        f"got {type(entry).__name__}."
+                    )
+                items.append(entry)
+        return items
+
+    def _run_json(self, args: Sequence[str]) -> dict[str, object]:
+        data = self._run_json_value(args)
+        if not isinstance(data, dict):
+            raise GhCliError(
+                f"Failed to parse JSON object from gh output. Received {type(data).__name__} instead."
+            )
+        return data
+
+    def _run_json_value(self, args: Sequence[str]) -> object:
         output = self._run_text(args)
         try:
             return json.loads(output)
         except json.JSONDecodeError as exc:
             raise GhCliError(f"Failed to parse JSON from gh output: {exc}") from exc
 
+    def _run_bytes(self, args: Sequence[str]) -> bytes:
+        completed, command = self._run_command(args)
+        return _coerce_subprocess_bytes(value=completed.stdout, command=command)
+
     def _run_text(self, args: Sequence[str]) -> str:
+        completed, command = self._run_command(args)
+        return _decode_subprocess_text(
+            value=completed.stdout,
+            stream_name="stdout",
+            command=command,
+        )
+
+    def _run_command(
+        self, args: Sequence[str]
+    ) -> tuple[subprocess.CompletedProcess[object], list[str]]:
         command = ["gh", *args]
         env = os.environ.copy()
         env.update(self.env_overrides)
@@ -130,11 +263,6 @@ class GhCli:
             capture_output=True,
             text=False,
         )
-        stdout = _decode_subprocess_text(
-            value=completed.stdout,
-            stream_name="stdout",
-            command=command,
-        )
         stderr = _decode_subprocess_text(
             value=completed.stderr,
             stream_name="stderr",
@@ -142,7 +270,7 @@ class GhCli:
         )
         if completed.returncode != 0:
             raise GhCliError(stderr or f"`{' '.join(command)}` failed with exit code {completed.returncode}.")
-        return stdout
+        return completed, command
 
 
 @dataclass(frozen=True)
@@ -179,6 +307,36 @@ def parse_actions_job_url(url: str | None) -> ActionsJobRef | None:
     )
 
 
+def _parse_pr_commit(raw_commit: dict[str, object]) -> PrCommit:
+    sha = str(raw_commit.get("sha") or "")
+    if not sha:
+        raise GhCliError("GitHub did not return a commit SHA for a PR commit.")
+
+    commit_data = raw_commit.get("commit") or {}
+    if not isinstance(commit_data, dict):
+        raise GhCliError(f"Unexpected commit payload for {sha}: {type(commit_data).__name__}.")
+
+    message = str(commit_data.get("message") or "")
+    message_headline = message.splitlines()[0] if message else sha[:7]
+
+    author_data = commit_data.get("author") or {}
+    if not isinstance(author_data, dict):
+        author_data = {}
+    committer_data = commit_data.get("committer") or {}
+    if not isinstance(committer_data, dict):
+        committer_data = {}
+
+    return PrCommit(
+        sha=sha,
+        short_sha=sha[:7],
+        message_headline=message_headline,
+        message=message,
+        authored_date=author_data.get("date"),
+        committed_date=committer_data.get("date"),
+        url=raw_commit.get("html_url"),
+    )
+
+
 def _decode_subprocess_text(*, value: object, stream_name: str, command: Sequence[str]) -> str:
     if value is None:
         return ""
@@ -210,4 +368,16 @@ def _decode_subprocess_text(*, value: object, stream_name: str, command: Sequenc
     raise GhCliError(
         f"Failed to decode gh {stream_name} for `{' '.join(command)}`. "
         "Tried UTF-8 and fallback single-byte decoders."
+    )
+
+
+def _coerce_subprocess_bytes(*, value: object, command: Sequence[str]) -> bytes:
+    if value is None:
+        return b""
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    raise GhCliError(
+        f"Unexpected gh stdout type {type(value).__name__!r} for `{' '.join(command)}`."
     )

@@ -1,9 +1,10 @@
 # prinfo
 
 `prinfo` is a cross-platform Python CLI that uses GitHub CLI (`gh`) to
-export pull request check logs into a local folder. The first version
-focuses on GitHub Actions-backed PR checks and writes one log file per
-check job plus a manifest.
+export pull request check logs into a local folder. It can also export the
+files touched by each PR commit into per-commit folders. The current
+implementation focuses on GitHub-backed PR metadata and writes manifests for
+both export modes.
 
 This repository also includes an Agent Skill for running, troubleshooting,
 and interpreting `prinfo`. Installation instructions are in
@@ -48,6 +49,18 @@ If you want empty job logs to appear only in `manifest.json` and not as zero-byt
 uv run prinfo --repo owner/repo --pr 123 --skip-empty-logs
 ```
 
+To export commit folders alongside the check logs:
+
+```bash
+uv run prinfo --repo owner/repo --pr 123 --export-commit-files
+```
+
+To export only commit folders and skip PR check logs:
+
+```bash
+uv run prinfo --repo owner/repo --pr 123 --export-commit-files --skip-check-logs
+```
+
 You can also load configuration from an env file:
 
 ```bash
@@ -59,6 +72,8 @@ Supported env keys:
 - `PRINFO_PR`
 - `PRINFO_REPO`
 - `PRINFO_OUTPUT_DIR`
+- `PRINFO_EXPORT_COMMIT_FILES`
+- `PRINFO_SKIP_CHECK_LOGS`
 - `PRINFO_GH_HOST`
 - `PRINFO_GH_TOKEN`
 - `PRINFO_GH_CONFIG_DIR`
@@ -82,12 +97,21 @@ The command writes:
 
 - one `*.log` file for each exported GitHub Actions job
 - `manifest.json` with exported and skipped checks
+- optional `commits/<commit-sha>/...` folders when `--export-commit-files` is enabled
+- optional `commits/<commit-sha>/_commit.json` per commit
+- optional `commits-manifest.json` with the PR commit list and per-commit summaries
 
 Checks that are not backed by GitHub Actions jobs are skipped and
 recorded in the manifest.
 
 When `--skip-empty-logs` is enabled, empty logs are still recorded in the
 manifest but their `path` is left empty and no zero-byte file is written.
+
+When `--export-commit-files` is enabled, commit export still runs even if the
+PR has no downloadable Actions logs. Removed files are recorded in commit
+metadata as skipped because they cannot be downloaded at the target commit SHA.
+
+When `--skip-check-logs` is enabled, `prinfo` performs a commit-only export.
 
 ## Skill
 

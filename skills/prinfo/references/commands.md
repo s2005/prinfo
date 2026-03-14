@@ -22,6 +22,15 @@ would be ambiguous:
 uv run prinfo --repo owner/repo --pr 123 --output-dir artifacts/pr-123
 ```
 
+## Keep empty logs only in the manifest
+
+Use this when the user wants skipped or empty jobs represented in
+`manifest.json` without writing zero-byte `.log` files:
+
+```bash
+uv run prinfo --repo owner/repo --pr 123 --skip-empty-logs
+```
+
 ## Environment file driven run
 
 Use this when the user already has a `.env` or wants a reusable config:
@@ -41,6 +50,7 @@ Supported keys:
 - `PRINFO_LOG_LEVEL`
 
 Remember that explicit CLI flags override values from the env file.
+There is currently no env-file key for `--skip-empty-logs`.
 
 ## Alternate GitHub account with token
 

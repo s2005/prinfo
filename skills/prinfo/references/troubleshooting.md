@@ -72,8 +72,25 @@ Symptom:
 Action:
 
 - inspect the recorded `reason` in the manifest
+- inspect `reason_code` to distinguish unsupported checks from missing
+  downloadable log content
 - expect non-GitHub Actions checks to be skipped
 - expect missing downloadable logs when GitHub returns `404`
+
+## A check exported but the log is empty
+
+Symptom:
+
+- an `exported` manifest entry has `has_log_content` set to `false`
+- the file is zero bytes, or `path` is empty when `--skip-empty-logs` was used
+
+Action:
+
+- inspect `empty_log_reason` in the manifest
+- if `conclusion` is `SKIPPED`, treat an empty log as expected behavior
+- if `saved` is `false`, confirm whether the run used `--skip-empty-logs`
+- if `saved` is `true` and the file is zero bytes, explain that the job
+  exposed a log endpoint but returned no content
 
 ## No logs exported at all
 

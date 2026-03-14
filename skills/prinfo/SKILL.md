@@ -26,9 +26,11 @@ check logs through the GitHub CLI.
    - `--gh-config-dir` or `PRINFO_GH_CONFIG_DIR`
 4. Choose the output directory. Default to `artifacts/pr-<pr-number>` when the
    user does not specify one.
-5. Run `uv run prinfo ...` from this repository when possible.
-6. Inspect `manifest.json`, exported logs, and skipped checks.
-7. Explain any failure in one of these buckets:
+5. Decide whether empty logs should be written as zero-byte files or recorded
+   only in `manifest.json` with `--skip-empty-logs`.
+6. Run `uv run prinfo ...` from this repository when possible.
+7. Inspect `manifest.json`, exported logs, and skipped checks.
+8. Explain any failure in one of these buckets:
    configuration, repository resolution, PR checks not found, unsupported
    checks, or log download failure.
 
@@ -51,6 +53,9 @@ check logs through the GitHub CLI.
 - If the user asks why a check was skipped, inspect the manifest before guessing.
 - If the user asks why nothing exported, verify whether every check was
   non-Actions or missing a downloadable log.
+- If the user asks about empty logs, inspect `has_log_content`,
+  `empty_log_reason`, and `saved` in the manifest before concluding the export
+  failed.
 
 ## Bundled References
 

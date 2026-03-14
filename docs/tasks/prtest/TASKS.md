@@ -15,3 +15,6 @@
 - Added local documentation for the CI and self-test flow.
 - Verified locally with `pytest`, `ruff`, `markdownlint-cli2`, and
   `prinfo --help`.
+- Opened PR [#1](https://github.com/s2005/prinfo/pull/1) against `main`.
+- Verified that all seven GitHub Actions checks passed on the PR.
+- Ran `prinfo` against `s2005/prinfo#1` and exported all seven job logs.

@@ -4,6 +4,7 @@ import argparse
 import logging
 from typing import Sequence
 
+from prinfo import __version__
 from prinfo.config import ConfigurationError, resolve_config
 from prinfo.exporter import ExportError, export_pr_check_logs
 from prinfo.gh import GhCli, GhCliError
@@ -13,6 +14,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prinfo",
         description="Export GitHub pull request check logs into a local folder using gh CLI.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument("--pr", type=int, help="Pull request number.")
     parser.add_argument("--repo", help="Repository in OWNER/REPO or HOST/OWNER/REPO format.")

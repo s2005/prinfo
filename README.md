@@ -15,6 +15,26 @@ and interpreting `prinfo`. Installation instructions are in
 - [uv](https://docs.astral.sh/uv/)
 - GitHub CLI (`gh`) installed and authenticated for the target repository
 
+## Install globally
+
+To make `prinfo` available as a shell command outside this repository, install it as a
+global `uv` tool from the checkout:
+
+```bash
+uv tool install --editable .
+```
+
+That exposes the `prinfo` command from uv's global tool bin directory while keeping it
+linked to the local repository for editable development.
+
+To install without cloning the repository first, install directly from Git:
+
+```bash
+uv tool install git+https://github.com/s2005/prinfo.git
+```
+
+That installs `prinfo` from the latest commit on the repository's default branch.
+
 ## Quick start
 
 ```bash

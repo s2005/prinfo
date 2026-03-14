@@ -63,3 +63,20 @@ uv sync --dev
 uv run pytest
 uv run ruff check .
 ```
+
+Markdown linting uses the repo-local
+[.markdownlint-cli2.jsonc](./.markdownlint-cli2.jsonc) configuration and a
+globally installed `markdownlint-cli2` binary:
+
+```bash
+markdownlint-cli2 "**/*.md" "#node_modules"
+```
+
+## CI
+
+GitHub Actions runs the following checks on pull requests:
+
+- `ruff`
+- `pytest`
+- `markdownlint-cli2`
+- CLI help smoke test on Windows, Linux, and macOS

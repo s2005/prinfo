@@ -5,6 +5,10 @@ export pull request check logs into a local folder. The first version
 focuses on GitHub Actions-backed PR checks and writes one log file per
 check job plus a manifest.
 
+This repository also includes an Agent Skill for running, troubleshooting,
+and interpreting `prinfo`. Installation instructions are in
+[INSTALL_SKILL.md](./INSTALL_SKILL.md).
+
 ## Requirements
 
 - Python 3.11+
@@ -55,6 +59,19 @@ The command writes:
 
 Checks that are not backed by GitHub Actions jobs are skipped and
 recorded in the manifest.
+
+## Skill
+
+The `prinfo` skill lives in `skills/prinfo` and is intended for agent
+workflows around:
+
+- building the right `prinfo` command
+- choosing `gh` authentication context
+- interpreting `manifest.json`
+- troubleshooting skipped checks and missing logs
+
+See [INSTALL_SKILL.md](./INSTALL_SKILL.md) for installation steps for
+Claude Code, VS Code, Cursor, and Codex.
 
 ## Development
 

@@ -27,6 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory where exported log files and the manifest will be written.",
     )
     parser.add_argument(
+        "--skip-empty-logs",
+        action="store_true",
+        help="Record empty logs in the manifest without writing zero-byte .log files.",
+    )
+    parser.add_argument(
         "--env-file",
         help="Optional env file containing PRINFO_* settings, for example .env or some.env.",
     )
@@ -68,8 +73,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         result.repo,
         result.output_dir,
     )
+    if result.manifest_only_logs:
+        logging.getLogger("prinfo").info(
+            "Recorded %s empty check log(s) in the manifest without writing files.",
+            result.manifest_only_logs,
+        )
     if result.skipped_checks:
-        logging.getLogger("prinfo").warning("Skipped %s unsupported check(s).", result.skipped_checks)
+        logging.getLogger("prinfo").warning("Skipped %s check(s).", result.skipped_checks)
     return 0
 
 

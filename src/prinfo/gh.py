@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -11,6 +12,7 @@ from typing import Callable, Sequence
 JOB_URL_RE = re.compile(
     r"^https://(?P<host>[^/]+)/(?P<owner>[^/]+)/(?P<repo>[^/]+)/actions/runs/(?P<run_id>\d+)(?:/job/(?P<job_id>\d+))?"
 )
+LOGGER = logging.getLogger(__name__)
 
 
 class GhCliError(RuntimeError):
@@ -49,7 +51,7 @@ class GhCli:
         gh_host: str = "github.com",
         gh_token: str | None = None,
         gh_config_dir: str | None = None,
-        runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+        runner: Callable[..., subprocess.CompletedProcess[object]] | None = None,
     ) -> None:
         self.gh_host = gh_host
         self.runner = runner or subprocess.run
@@ -107,7 +109,7 @@ class GhCli:
             "Accept: application/vnd.github+json",
             f"repos/{repo.owner}/{repo.name}/actions/jobs/{job_id}/logs",
         ]
-        return self._run_text(command).lstrip("\ufeff")
+        return self._run_text(command)
 
     def _run_json(self, args: Sequence[str]) -> dict:
         output = self._run_text(args)
@@ -126,12 +128,21 @@ class GhCli:
             env=env,
             check=False,
             capture_output=True,
-            text=True,
+            text=False,
+        )
+        stdout = _decode_subprocess_text(
+            value=completed.stdout,
+            stream_name="stdout",
+            command=command,
+        )
+        stderr = _decode_subprocess_text(
+            value=completed.stderr,
+            stream_name="stderr",
+            command=command,
         )
         if completed.returncode != 0:
-            stderr = (completed.stderr or "").strip()
             raise GhCliError(stderr or f"`{' '.join(command)}` failed with exit code {completed.returncode}.")
-        return completed.stdout
+        return stdout
 
 
 @dataclass(frozen=True)
@@ -165,4 +176,38 @@ def parse_actions_job_url(url: str | None) -> ActionsJobRef | None:
         repo=match.group("repo"),
         run_id=int(match.group("run_id")),
         job_id=int(match.group("job_id")) if match.group("job_id") else None,
+    )
+
+
+def _decode_subprocess_text(*, value: object, stream_name: str, command: Sequence[str]) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.removeprefix("\ufeff")
+    if not isinstance(value, bytes):
+        raise GhCliError(
+            f"Unexpected gh {stream_name} type {type(value).__name__!r} for `{' '.join(command)}`."
+        )
+
+    try:
+        return value.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+
+    for fallback_encoding in ("cp1252", "latin-1"):
+        try:
+            decoded_value = value.decode(fallback_encoding)
+        except UnicodeDecodeError:
+            continue
+        LOGGER.debug(
+            "Decoded gh %s with fallback encoding %s for command `%s`.",
+            stream_name,
+            fallback_encoding,
+            " ".join(command),
+        )
+        return decoded_value
+
+    raise GhCliError(
+        f"Failed to decode gh {stream_name} for `{' '.join(command)}`. "
+        "Tried UTF-8 and fallback single-byte decoders."
     )

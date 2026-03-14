@@ -14,10 +14,12 @@ class FakeGhCli:
         *,
         repo: str | None = None,
         checks: list[CheckRun] | None = None,
+        job_outputs: dict[int, str] | None = None,
         failing_jobs: dict[int, str] | None = None,
     ) -> None:
         self.repo = repo
         self.checks = checks or []
+        self.job_outputs = job_outputs or {}
         self.failing_jobs = failing_jobs or {}
         self.downloaded_jobs: list[int] = []
         self.available_checked = False
@@ -38,6 +40,8 @@ class FakeGhCli:
         self.downloaded_jobs.append(job_id)
         if job_id in self.failing_jobs:
             raise GhCliError(self.failing_jobs[job_id])
+        if job_id in self.job_outputs:
+            return self.job_outputs[job_id]
         return f"log-output-{job_id}\n"
 
 
@@ -63,6 +67,7 @@ def test_export_pr_check_logs_writes_logs_and_manifest(tmp_path: Path) -> None:
         pr_number=42,
         repo="octo/repo",
         output_dir=tmp_path / "output",
+        skip_empty_logs=False,
         env_file=None,
         gh_host="github.com",
         gh_token=None,
@@ -99,13 +104,18 @@ def test_export_pr_check_logs_writes_logs_and_manifest(tmp_path: Path) -> None:
     assert gh.available_checked is True
     assert gh.downloaded_jobs == [22]
     assert result.exported_logs == 1
+    assert result.manifest_only_logs == 0
     assert result.skipped_checks == 1
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["repo"] == "octo/repo"
     assert manifest["pr_number"] == 42
     assert manifest["exported"][0]["path"].endswith(".log")
+    assert manifest["exported"][0]["saved"] is True
+    assert manifest["exported"][0]["has_log_content"] is True
+    assert manifest["exported"][0]["empty_log_reason"] is None
     assert manifest["skipped"][0]["reason"] == "check is not a GitHub Actions job"
+    assert manifest["skipped"][0]["reason_code"] == "unsupported_check_type"
 
 
 def test_export_pr_check_logs_fails_when_nothing_is_exportable(tmp_path: Path) -> None:
@@ -113,6 +123,7 @@ def test_export_pr_check_logs_fails_when_nothing_is_exportable(tmp_path: Path) -
         pr_number=99,
         repo="octo/repo",
         output_dir=tmp_path / "output",
+        skip_empty_logs=False,
         env_file=None,
         gh_host="github.com",
         gh_token=None,
@@ -143,6 +154,7 @@ def test_export_pr_check_logs_skips_missing_job_logs(tmp_path: Path) -> None:
         pr_number=77,
         repo="octo/repo",
         output_dir=tmp_path / "output",
+        skip_empty_logs=False,
         env_file=None,
         gh_host="github.com",
         gh_token=None,
@@ -178,4 +190,93 @@ def test_export_pr_check_logs_skips_missing_job_logs(tmp_path: Path) -> None:
     result = export_pr_check_logs(config, gh)
 
     assert result.exported_logs == 1
+    assert result.manifest_only_logs == 0
     assert result.skipped_checks == 1
+
+
+def test_export_pr_check_logs_keeps_zero_byte_skipped_job_log_in_manifest(tmp_path: Path) -> None:
+    config = AppConfig(
+        pr_number=88,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        checks=[
+            CheckRun(
+                name="build / skipped",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SKIPPED",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/33",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=33,
+            )
+        ],
+        job_outputs={33: ""},
+    )
+
+    result = export_pr_check_logs(config, gh)
+
+    assert result.exported_logs == 1
+    assert result.manifest_only_logs == 0
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    exported_entry = manifest["exported"][0]
+
+    assert exported_entry["saved"] is True
+    assert exported_entry["bytes"] == 0
+    assert exported_entry["has_log_content"] is False
+    assert exported_entry["empty_log_reason"] == "job concluded skipped and produced no log output"
+    assert (config.output_dir / exported_entry["path"]).exists()
+    assert (config.output_dir / exported_entry["path"]).stat().st_size == 0
+
+
+def test_export_pr_check_logs_can_skip_writing_empty_log_files(tmp_path: Path) -> None:
+    config = AppConfig(
+        pr_number=89,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=True,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        checks=[
+            CheckRun(
+                name="build / skipped",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SKIPPED",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/33",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=33,
+            )
+        ],
+        job_outputs={33: ""},
+    )
+
+    result = export_pr_check_logs(config, gh)
+
+    assert result.exported_logs == 0
+    assert result.manifest_only_logs == 1
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    exported_entry = manifest["exported"][0]
+
+    assert exported_entry["saved"] is False
+    assert exported_entry["path"] is None
+    assert exported_entry["bytes"] == 0
+    assert exported_entry["has_log_content"] is False
+    assert exported_entry["empty_log_reason"] == "job concluded skipped and produced no log output"
+    assert list(config.output_dir.glob("*.log")) == []

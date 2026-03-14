@@ -42,6 +42,12 @@ uv sync --dev
 uv run prinfo --repo owner/repo --pr 123 --output-dir artifacts/pr-123
 ```
 
+If you want empty job logs to appear only in `manifest.json` and not as zero-byte files:
+
+```bash
+uv run prinfo --repo owner/repo --pr 123 --skip-empty-logs
+```
+
 You can also load configuration from an env file:
 
 ```bash
@@ -79,6 +85,9 @@ The command writes:
 
 Checks that are not backed by GitHub Actions jobs are skipped and
 recorded in the manifest.
+
+When `--skip-empty-logs` is enabled, empty logs are still recorded in the
+manifest but their `path` is left empty and no zero-byte file is written.
 
 ## Skill
 

@@ -19,6 +19,7 @@ class AppConfig:
     pr_number: int
     repo: str | None
     output_dir: Path
+    skip_empty_logs: bool
     env_file: Path | None
     gh_host: str
     gh_token: str | None
@@ -34,17 +35,22 @@ def resolve_config(args, environ: Mapping[str, str] | None = None) -> AppConfig:
     pr_number = _resolve_int(args.pr, env_values.get("PRINFO_PR"), "PR number")
     repo = _resolve_str(args.repo, env_values.get("PRINFO_REPO"))
     output_dir_value = _resolve_str(args.output_dir, env_values.get("PRINFO_OUTPUT_DIR"))
-    output_dir = Path(output_dir_value) if output_dir_value else Path("artifacts") / f"pr-{pr_number}"
+    output_dir = _resolve_path(
+        path_value=output_dir_value,
+        default_path=Path("artifacts") / f"pr-{pr_number}",
+    )
+    skip_empty_logs = bool(getattr(args, "skip_empty_logs", False))
     gh_host = _resolve_str(args.gh_host, env_values.get("PRINFO_GH_HOST")) or "github.com"
     gh_token = _resolve_str(args.gh_token, env_values.get("PRINFO_GH_TOKEN"))
     gh_config_dir_value = _resolve_str(args.gh_config_dir, env_values.get("PRINFO_GH_CONFIG_DIR"))
-    gh_config_dir = Path(gh_config_dir_value) if gh_config_dir_value else None
+    gh_config_dir = _resolve_path(path_value=gh_config_dir_value)
     log_level = (_resolve_str(args.log_level, env_values.get("PRINFO_LOG_LEVEL")) or "INFO").upper()
 
     return AppConfig(
         pr_number=pr_number,
         repo=repo,
         output_dir=output_dir,
+        skip_empty_logs=skip_empty_logs,
         env_file=env_file,
         gh_host=gh_host,
         gh_token=gh_token,
@@ -73,6 +79,12 @@ def _load_env_values(env_file: Path | None) -> dict[str, str]:
         return {}
     raw_values = dotenv_values(env_file)
     return {key: value for key, value in raw_values.items() if value is not None}
+
+
+def _resolve_path(path_value: str | None, default_path: Path | None = None) -> Path | None:
+    if path_value is None:
+        return default_path
+    return Path(path_value).expanduser()
 
 
 def _resolve_int(cli_value: int | None, env_value: str | None, label: str) -> int:

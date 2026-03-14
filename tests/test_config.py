@@ -26,6 +26,7 @@ def test_resolve_config_prefers_cli_values_over_env_file(tmp_path: Path) -> None
         pr=200,
         repo="cli/override",
         output_dir="cli-output",
+        skip_empty_logs=True,
         env_file=str(env_file),
         gh_host="github.com",
         gh_token="cli-token",
@@ -38,6 +39,7 @@ def test_resolve_config_prefers_cli_values_over_env_file(tmp_path: Path) -> None
     assert config.pr_number == 200
     assert config.repo == "cli/override"
     assert config.output_dir == Path("cli-output")
+    assert config.skip_empty_logs is True
     assert config.gh_host == "github.com"
     assert config.gh_token == "cli-token"
     assert config.gh_config_dir == Path("cli-gh")
@@ -49,6 +51,7 @@ def test_resolve_config_uses_defaults_when_optional_values_missing() -> None:
         pr=15,
         repo=None,
         output_dir=None,
+        skip_empty_logs=False,
         env_file=None,
         gh_host=None,
         gh_token=None,
@@ -61,10 +64,47 @@ def test_resolve_config_uses_defaults_when_optional_values_missing() -> None:
     assert config.pr_number == 15
     assert config.repo is None
     assert config.output_dir == Path("artifacts") / "pr-15"
+    assert config.skip_empty_logs is False
     assert config.gh_host == "github.com"
     assert config.gh_token is None
     assert config.gh_config_dir is None
     assert config.log_level == "INFO"
+
+
+def test_resolve_config_preserves_absolute_windows_output_dir() -> None:
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=r"C:\path\to\output",
+        skip_empty_logs=False,
+        env_file=None,
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args, environ={})
+
+    assert config.output_dir == Path(r"C:\path\to\output")
+
+
+def test_resolve_config_preserves_relative_backslash_output_dir() -> None:
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=r"relative\path",
+        skip_empty_logs=False,
+        env_file=None,
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args, environ={})
+
+    assert config.output_dir == Path(r"relative\path")
 
 
 def test_resolve_config_requires_pr_number() -> None:
@@ -72,6 +112,7 @@ def test_resolve_config_requires_pr_number() -> None:
         pr=None,
         repo=None,
         output_dir=None,
+        skip_empty_logs=False,
         env_file=None,
         gh_host=None,
         gh_token=None,

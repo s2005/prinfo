@@ -89,7 +89,7 @@ Requirements: REQ-6
 - [x] Run each requested mode in its own `try` with per-mode error recording.
 - [x] Raise only when no mode produced a result.
 - [x] Log a per-mode summary covering all four modes.
-- [x] Bump `__version__` to `0.4.0`.
+- [x] Bump the version to `0.4.0` in `src/prinfo/__init__.py` and `pyproject.toml`, and run `uv lock`.
 - [x] Add CLI tests for partial-failure exit 0 and total-failure exit 1.
 - [x] Update the `--version` test to `0.4.0`.
 - [x] Run `uv run pytest` and `uv run ruff check .`.

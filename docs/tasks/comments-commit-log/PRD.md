@@ -92,6 +92,8 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 | src/prinfo/cli.py | Update |
 | src/prinfo/exporter.py | Update |
 | `src/prinfo/__init__.py` | Update |
+| pyproject.toml | Update |
+| uv.lock | Update |
 | tests/test_gh.py | Update |
 | tests/test_config.py | Update |
 | tests/test_cli.py | Update |

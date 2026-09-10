@@ -7,10 +7,12 @@ import pytest
 from prinfo.config import AppConfig
 from prinfo.exporter import (
     ExportError,
+    PrCommitCache,
     build_log_filename,
     export_pr_check_logs,
     export_pr_comments,
     export_pr_commit_files,
+    export_pr_commit_log,
 )
 from prinfo.gh import (
     CheckRun,
@@ -60,6 +62,7 @@ class FakeGhCli:
         self.downloaded_commit_files: list[tuple[str, str]] = []
         self.comment_calls: list[str] = []
         self.available_checked = False
+        self.list_pr_commits_calls = 0
 
     def ensure_available(self) -> None:
         self.available_checked = True
@@ -75,6 +78,7 @@ class FakeGhCli:
 
     def list_pr_commits(self, repo: str, pr_number: int) -> list[PrCommit]:
         assert pr_number > 0
+        self.list_pr_commits_calls += 1
         return self.commits
 
     def get_commit_details(self, repo, sha: str) -> CommitDetails:
@@ -522,6 +526,184 @@ def test_export_pr_commit_files_continues_when_a_file_download_fails(tmp_path: P
     )
     assert commit_manifest["skipped"][0]["path"] == "src/missing.py"
     assert commit_manifest["skipped"][0]["reason_code"] == "download_failed"
+
+
+def _commit_log_config(*, tmp_path: Path) -> AppConfig:
+    return AppConfig(
+        pr_number=42,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=True,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+
+
+def test_export_pr_commit_log_writes_commit_metadata_only(tmp_path: Path) -> None:
+    commit_one = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Add feature",
+        message="Add feature\n\nLonger body.",
+        authored_date="2024-01-01T00:00:00Z",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    commit_two = PrCommit(
+        sha="def5678abc1234",
+        short_sha="def5678",
+        message_headline="Fix bug",
+        message="Fix bug",
+        authored_date="2024-01-02T00:00:00Z",
+        committed_date="2024-01-02T00:00:01Z",
+        url="https://github.com/octo/repo/commit/def5678abc1234",
+    )
+    config = _commit_log_config(tmp_path=tmp_path)
+    gh = FakeGhCli(commits=[commit_one, commit_two])
+
+    result = export_pr_commit_log(config, gh)
+
+    assert gh.available_checked is True
+    assert result.commit_count == 2
+    assert gh.downloaded_commit_files == []
+    assert not (config.output_dir / "commits").exists()
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["repo"] == "octo/repo"
+    assert manifest["pr_number"] == 42
+    assert manifest["commit_count"] == 2
+    assert len(manifest["commits"]) == 2
+    first = manifest["commits"][0]
+    assert first["sha"] == commit_one.sha
+    assert first["short_sha"] == commit_one.short_sha
+    assert first["message_headline"] == commit_one.message_headline
+    assert first["message"] == commit_one.message
+    assert first["authored_date"] == commit_one.authored_date
+    assert first["committed_date"] == commit_one.committed_date
+    assert first["url"] == commit_one.url
+
+
+def test_export_pr_commit_log_and_files_share_one_commit_fetch(tmp_path: Path) -> None:
+    commit = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Add feature",
+        message="Add feature",
+        authored_date="2024-01-01T00:00:00Z",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    config = AppConfig(
+        pr_number=42,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=True,
+        export_comments=False,
+        export_commit_log=True,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        commits=[commit],
+        commit_details={
+            commit.sha: CommitDetails(
+                commit=commit,
+                files=[
+                    CommitFile(
+                        path="src/app.py",
+                        status="modified",
+                        additions=3,
+                        deletions=1,
+                        changes=4,
+                        previous_path=None,
+                    ),
+                ],
+            )
+        },
+        commit_file_outputs={
+            (commit.sha, "src/app.py"): b"print('hello')\n",
+        },
+    )
+
+    cache = PrCommitCache()
+    export_pr_commit_files(config, gh, cache)
+    export_pr_commit_log(config, gh, cache)
+
+    assert gh.list_pr_commits_calls == 1
+    assert (config.output_dir / "commit-log.json").exists()
+    assert (config.output_dir / "commits-manifest.json").exists()
+
+
+def test_export_pr_commit_log_raises_when_pr_has_no_commits(tmp_path: Path) -> None:
+    config = _commit_log_config(tmp_path=tmp_path)
+    gh = FakeGhCli(commits=[])
+
+    with pytest.raises(ExportError):
+        export_pr_commit_log(config, gh)
+
+
+def test_export_pr_commit_files_without_cache_still_fetches_commits(tmp_path: Path) -> None:
+    commit = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Add feature",
+        message="Add feature",
+        authored_date="2024-01-01T00:00:00Z",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    config = AppConfig(
+        pr_number=42,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=True,
+        export_comments=False,
+        export_commit_log=False,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        commits=[commit],
+        commit_details={
+            commit.sha: CommitDetails(
+                commit=commit,
+                files=[
+                    CommitFile(
+                        path="src/app.py",
+                        status="modified",
+                        additions=3,
+                        deletions=1,
+                        changes=4,
+                        previous_path=None,
+                    ),
+                ],
+            )
+        },
+        commit_file_outputs={
+            (commit.sha, "src/app.py"): b"print('hello')\n",
+        },
+    )
+
+    export_pr_commit_files(config, gh)
+
+    assert gh.list_pr_commits_calls == 1
 
 
 def _comments_config(*, tmp_path: Path, pr_number: int = 42) -> AppConfig:

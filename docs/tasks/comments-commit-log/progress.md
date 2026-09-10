@@ -73,13 +73,13 @@ Requirements: REQ-2, REQ-3, REQ-6, REQ-7
 
 Requirements: REQ-4
 
-- [ ] Add `CommitLogExportResult`.
-- [ ] Add the shared commit-list cache and route `export_pr_commit_files` through it.
-- [ ] Add `export_pr_commit_log` writing `commit-log.json` and downloading nothing.
-- [ ] Confirm `commits-manifest.json` and `_commit.json` are unchanged.
-- [ ] Add a test that the commit-log export downloads no files.
-- [ ] Add a counting-fake test asserting exactly one `list_pr_commits` call when both commit modes run.
-- [ ] Run `uv run pytest tests/test_exporter.py`.
+- [x] Add `CommitLogExportResult`.
+- [x] Add the shared commit-list cache and route `export_pr_commit_files` through it.
+- [x] Add `export_pr_commit_log` writing `commit-log.json` and downloading nothing.
+- [x] Confirm `commits-manifest.json` and `_commit.json` are unchanged.
+- [x] Add a test that the commit-log export downloads no files.
+- [x] Add a counting-fake test asserting exactly one `list_pr_commits` call when both commit modes run.
+- [x] Run `uv run pytest tests/test_exporter.py`.
 
 ## Phase 5: Orchestration and docs
 

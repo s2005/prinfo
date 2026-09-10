@@ -15,6 +15,7 @@ from prinfo.gh import (
     GhCli,
     GhCliError,
     IssueComment,
+    PrCommit,
     PullRequestReview,
     ReviewComment,
     ReviewThread,
@@ -49,6 +50,35 @@ class CommitExportResult:
     commit_count: int
     exported_files: int
     skipped_files: int
+
+
+@dataclass(frozen=True)
+class CommitLogExportResult:
+    repo: str
+    pr_number: int
+    output_dir: Path
+    manifest_path: Path
+    commit_count: int
+
+
+class PrCommitCache:
+    """Holds the PR commit list so both commit export modes share one fetch."""
+
+    def __init__(self) -> None:
+        self._commits: list[PrCommit] | None = None
+
+    def get(self, *, gh: GhCli, repo: str, pr_number: int) -> list[PrCommit]:
+        if self._commits is None:
+            self._commits = gh.list_pr_commits(repo, pr_number)
+        return self._commits
+
+
+def _fetch_pr_commits(
+    *, gh: GhCli, repo: str, pr_number: int, cache: PrCommitCache | None
+) -> list[PrCommit]:
+    if cache is None:
+        return gh.list_pr_commits(repo, pr_number)
+    return cache.get(gh=gh, repo=repo, pr_number=pr_number)
 
 
 @dataclass(frozen=True)
@@ -282,12 +312,16 @@ def export_pr_comments(config: AppConfig, gh: GhCli) -> CommentExportResult:
     )
 
 
-def export_pr_commit_files(config: AppConfig, gh: GhCli) -> CommitExportResult:
+def export_pr_commit_files(
+    config: AppConfig, gh: GhCli, commits_cache: PrCommitCache | None = None
+) -> CommitExportResult:
     gh.ensure_available()
 
     repo_name = config.repo or gh.detect_repo()
     repo_ref = parse_repo_ref(repo_name, config.gh_host)
-    commits = gh.list_pr_commits(repo_ref.full_name, config.pr_number)
+    commits = _fetch_pr_commits(
+        gh=gh, repo=repo_ref.full_name, pr_number=config.pr_number, cache=commits_cache
+    )
     if not commits:
         raise ExportError(f"No commits were found for PR #{config.pr_number} in {repo_ref.full_name}.")
 
@@ -332,6 +366,41 @@ def export_pr_commit_files(config: AppConfig, gh: GhCli) -> CommitExportResult:
         commit_count=len(commits),
         exported_files=exported_files,
         skipped_files=skipped_files,
+    )
+
+
+def export_pr_commit_log(
+    config: AppConfig, gh: GhCli, commits_cache: PrCommitCache | None = None
+) -> CommitLogExportResult:
+    gh.ensure_available()
+
+    repo_name = config.repo or gh.detect_repo()
+    repo_ref = parse_repo_ref(repo_name, config.gh_host)
+    commits = _fetch_pr_commits(
+        gh=gh, repo=repo_ref.full_name, pr_number=config.pr_number, cache=commits_cache
+    )
+    if not commits:
+        raise ExportError(f"No commits were found for PR #{config.pr_number} in {repo_ref.full_name}.")
+
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    LOGGER.info("Writing commit log metadata for %d commits", len(commits))
+
+    manifest_path = config.output_dir / "commit-log.json"
+    manifest = {
+        "repo": repo_ref.full_name,
+        "pr_number": config.pr_number,
+        "commit_count": len(commits),
+        "commits": [asdict(commit) for commit in commits],
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    return CommitLogExportResult(
+        repo=repo_ref.full_name,
+        pr_number=config.pr_number,
+        output_dir=config.output_dir,
+        manifest_path=manifest_path,
+        commit_count=len(commits),
     )
 
 

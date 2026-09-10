@@ -23,6 +23,40 @@ def test_build_parser_supports_commit_export_flag() -> None:
     assert args.export_commit_files is True
 
 
+def test_build_parser_supports_comment_export_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["--pr", "123", "--export-comments"])
+
+    assert args.export_comments is True
+
+
+def test_build_parser_supports_commit_log_export_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["--pr", "123", "--export-commit-log"])
+
+    assert args.export_commit_log is True
+
+
+def test_build_parser_supports_both_new_export_flags() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "--pr",
+            "123",
+            "--export-comments",
+            "--export-commit-log",
+            "--skip-check-logs",
+        ]
+    )
+
+    assert args.export_comments is True
+    assert args.export_commit_log is True
+    assert args.skip_check_logs is True
+
+
 def test_build_parser_supports_skip_check_logs_flag() -> None:
     parser = build_parser()
 
@@ -47,6 +81,8 @@ def test_main_skips_check_log_export_when_requested(monkeypatch: pytest.MonkeyPa
             "gh_token": None,
             "gh_config_dir": None,
             "export_commit_files": True,
+            "export_comments": False,
+            "export_commit_log": False,
             "skip_check_logs": True,
         },
     )()

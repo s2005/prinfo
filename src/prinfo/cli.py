@@ -41,9 +41,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Export PR commits into commits/<sha>/ folders with the changed files saved per commit.",
     )
     parser.add_argument(
+        "--export-comments",
+        action="store_true",
+        help=(
+            "Export PR discussion, review comments and review verdicts to comments.json and "
+            "comments.md."
+        ),
+    )
+    parser.add_argument(
+        "--export-commit-log",
+        action="store_true",
+        help=(
+            "Export PR commit metadata to commit-log.json without downloading any changed files."
+        ),
+    )
+    parser.add_argument(
         "--skip-check-logs",
         action="store_true",
-        help="Skip PR check-log export. Use with --export-commit-files for commit-only exports.",
+        help=(
+            "Skip PR check-log export. Use with --export-commit-files, --export-comments or "
+            "--export-commit-log."
+        ),
     )
     parser.add_argument(
         "--env-file",

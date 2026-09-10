@@ -133,3 +133,253 @@ def test_download_commit_file_returns_raw_bytes() -> None:
     )
 
     assert output == b"\x00\xffdata"
+
+
+def test_list_pr_issue_comments_parses_paginated_payload() -> None:
+    payload = (
+        b'[[{"id":1,"user":{"login":"alice","type":"User"},"body":"first",'
+        b'"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:01Z",'
+        b'"html_url":"https://github.com/octo/repo/issues/1#issuecomment-1"}],'
+        b'[{"id":2,"user":{"login":"bob","type":"User"},"body":"second",'
+        b'"created_at":"2024-01-02T00:00:00Z","updated_at":"2024-01-02T00:00:01Z",'
+        b'"html_url":"https://github.com/octo/repo/issues/1#issuecomment-2"}]]'
+    )
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    comments = client.list_pr_issue_comments("octo/repo", 1)
+
+    assert len(comments) == 2
+    assert comments[0].comment_id == 1
+    assert comments[0].author == "alice"
+    assert comments[0].author_type == "User"
+    assert comments[0].body == "first"
+    assert comments[0].created_at == "2024-01-01T00:00:00Z"
+    assert comments[0].updated_at == "2024-01-01T00:00:01Z"
+    assert comments[0].url == "https://github.com/octo/repo/issues/1#issuecomment-1"
+    assert comments[1].comment_id == 2
+    assert comments[1].author == "bob"
+    assert comments[1].author_type == "User"
+    assert comments[1].body == "second"
+    assert comments[1].created_at == "2024-01-02T00:00:00Z"
+    assert comments[1].updated_at == "2024-01-02T00:00:01Z"
+    assert comments[1].url == "https://github.com/octo/repo/issues/1#issuecomment-2"
+
+
+def test_list_pr_review_comments_parses_inline_fields() -> None:
+    payload = (
+        b'[{"id":10,"user":{"login":"carol","type":"User"},"body":"nit",'
+        b'"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:01Z",'
+        b'"html_url":"https://github.com/octo/repo/pull/1#discussion_r10",'
+        b'"path":"src/app.py","line":12,"original_line":10,"side":"RIGHT",'
+        b'"commit_id":"abc1234","in_reply_to_id":5,"diff_hunk":"@@ -1 +1 @@",'
+        b'"pull_request_review_id":99}]'
+    )
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    comments = client.list_pr_review_comments("octo/repo", 1)
+
+    assert len(comments) == 1
+    comment = comments[0]
+    assert comment.comment_id == 10
+    assert comment.author == "carol"
+    assert comment.author_type == "User"
+    assert comment.body == "nit"
+    assert comment.created_at == "2024-01-01T00:00:00Z"
+    assert comment.updated_at == "2024-01-01T00:00:01Z"
+    assert comment.url == "https://github.com/octo/repo/pull/1#discussion_r10"
+    assert comment.path == "src/app.py"
+    assert comment.line == 12
+    assert comment.original_line == 10
+    assert comment.side == "RIGHT"
+    assert comment.commit_id == "abc1234"
+    assert comment.in_reply_to_id == 5
+    assert comment.diff_hunk == "@@ -1 +1 @@"
+    assert comment.pull_request_review_id == 99
+    assert comment.is_resolved is None
+    assert comment.thread_id is None
+
+
+def test_list_pr_reviews_parses_review_state() -> None:
+    payload = (
+        b'[{"id":42,"user":{"login":"dave","type":"User"},"body":"looks good",'
+        b'"state":"APPROVED","submitted_at":"2024-01-03T00:00:00Z",'
+        b'"html_url":"https://github.com/octo/repo/pull/1#pullrequestreview-42",'
+        b'"commit_id":"def5678"}]'
+    )
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    reviews = client.list_pr_reviews("octo/repo", 1)
+
+    assert len(reviews) == 1
+    review = reviews[0]
+    assert review.review_id == 42
+    assert review.author == "dave"
+    assert review.state == "APPROVED"
+    assert review.submitted_at == "2024-01-03T00:00:00Z"
+    assert review.body == "looks good"
+    assert review.url == "https://github.com/octo/repo/pull/1#pullrequestreview-42"
+    assert review.commit_id == "def5678"
+
+
+def test_list_pr_issue_comments_raises_when_entry_is_not_an_object() -> None:
+    payload = b'["not-an-object"]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    with pytest.raises(GhCliError, match="issues/1/comments"):
+        client.list_pr_issue_comments("octo/repo", 1)
+
+
+def test_list_pr_review_comments_raises_when_entry_is_not_an_object() -> None:
+    payload = b'["not-an-object"]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    with pytest.raises(GhCliError, match="pulls/1/comments"):
+        client.list_pr_review_comments("octo/repo", 1)
+
+
+def test_list_pr_reviews_raises_when_entry_is_not_an_object() -> None:
+    payload = b'["not-an-object"]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    with pytest.raises(GhCliError, match="pulls/1/reviews"):
+        client.list_pr_reviews("octo/repo", 1)
+
+
+def test_list_pr_issue_comments_tolerates_missing_user() -> None:
+    payload = b'[{"id":1,"body":"no user here"}]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    comments = client.list_pr_issue_comments("octo/repo", 1)
+
+    assert comments[0].author is None
+    assert comments[0].author_type is None
+
+
+def test_list_pr_review_comments_resolves_absent_optional_fields_to_none() -> None:
+    payload = b'[{"id":1,"body":"minimal"}]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    comments = client.list_pr_review_comments("octo/repo", 1)
+
+    comment = comments[0]
+    assert comment.path is None
+    assert comment.line is None
+    assert comment.side is None
+    assert comment.in_reply_to_id is None
+    assert comment.diff_hunk is None
+
+
+def test_list_pr_review_threads_parses_paginated_graphql_documents() -> None:
+    page_one = (
+        b'{"data":{"repository":{"pullRequest":{"reviewThreads":{'
+        b'"pageInfo":{"hasNextPage":true,"endCursor":"cursor-1"},'
+        b'"nodes":[{"id":"thread-1","isResolved":true,"isOutdated":false,'
+        b'"comments":{"nodes":[{"databaseId":10},{"databaseId":11}]}}]}}}}}'
+    )
+    page_two = (
+        b'{"data":{"repository":{"pullRequest":{"reviewThreads":{'
+        b'"pageInfo":{"hasNextPage":false,"endCursor":null},'
+        b'"nodes":[{"id":"thread-2","isResolved":false,"isOutdated":true,'
+        b'"comments":{"nodes":[{"databaseId":20}]}}]}}}}}'
+    )
+    payload = page_one + page_two
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    threads = client.list_pr_review_threads("octo/repo", 1)
+
+    assert len(threads) == 2
+    assert threads[0].thread_id == "thread-1"
+    assert threads[0].is_resolved is True
+    assert threads[0].is_outdated is False
+    assert threads[0].comment_ids == [10, 11]
+    assert threads[1].thread_id == "thread-2"
+    assert threads[1].is_resolved is False
+    assert threads[1].is_outdated is True
+    assert threads[1].comment_ids == [20]
+
+
+def test_list_pr_review_threads_parses_single_json_document() -> None:
+    payload = (
+        b'{"data":{"repository":{"pullRequest":{"reviewThreads":{'
+        b'"pageInfo":{"hasNextPage":false,"endCursor":null},'
+        b'"nodes":[{"id":"thread-1","isResolved":true,"isOutdated":false,'
+        b'"comments":{"nodes":[{"databaseId":10}]}}]}}}}}'
+    )
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    threads = client.list_pr_review_threads("octo/repo", 1)
+
+    assert len(threads) == 1
+    assert threads[0].thread_id == "thread-1"
+
+
+def test_list_pr_review_threads_passes_enterprise_hostname() -> None:
+    captured_commands: list[list[str]] = []
+
+    def bytes_runner(*args, **kwargs):
+        captured_commands.append(list(args[0]))
+        return subprocess.CompletedProcess(args[0], 0, stdout=b"", stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    threads = client.list_pr_review_threads("git.example.com/octo/repo", 7)
+
+    assert threads == []
+    assert len(captured_commands) == 1
+    command = captured_commands[0]
+    assert "graphql" in command
+    hostname_index = command.index("--hostname")
+    assert command[hostname_index + 1] == "git.example.com"
+    f_flag_indices = [index for index, value in enumerate(command) if value == "-F"]
+    assert any(command[index + 1] == "number=7" for index in f_flag_indices)
+
+
+def test_list_pr_review_threads_returns_empty_list_for_blank_output() -> None:
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=b"", stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    threads = client.list_pr_review_threads("octo/repo", 1)
+
+    assert threads == []

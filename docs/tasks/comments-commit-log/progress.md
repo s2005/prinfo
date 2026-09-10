@@ -38,17 +38,17 @@ Requirements: REQ-5
 
 Requirements: REQ-1, REQ-7
 
-- [ ] Add `IssueComment`, `ReviewComment`, `PullRequestReview` and `ReviewThread` dataclasses.
-- [ ] Add `_parse_issue_comment`, `_parse_review_comment` and `_parse_review`.
-- [ ] Add `list_pr_issue_comments` over `issues/<n>/comments`.
-- [ ] Add `list_pr_review_comments` over `pulls/<n>/comments`.
-- [ ] Add `list_pr_reviews` over `pulls/<n>/reviews`.
-- [ ] Add `_run_graphql_paginated` handling both single-document and multi-document output.
-- [ ] Add `list_pr_review_threads` selecting `isResolved`, `isOutdated` and `comments.nodes.databaseId`.
-- [ ] Add parser tests for each REST method over a two-page payload.
-- [ ] Add tests for malformed entries and a missing `user` object.
-- [ ] Add a paginated GraphQL parse test and a `--hostname` test for an enterprise repo.
-- [ ] Run `uv run pytest tests/test_gh.py` and `uv run ruff check src tests`.
+- [x] Add `IssueComment`, `ReviewComment`, `PullRequestReview` and `ReviewThread` dataclasses.
+- [x] Add `_parse_issue_comment`, `_parse_review_comment` and `_parse_review`.
+- [x] Add `list_pr_issue_comments` over `issues/<n>/comments`.
+- [x] Add `list_pr_review_comments` over `pulls/<n>/comments`.
+- [x] Add `list_pr_reviews` over `pulls/<n>/reviews`.
+- [x] Add `_run_graphql_paginated` handling both single-document and multi-document output.
+- [x] Add `list_pr_review_threads` selecting `isResolved`, `isOutdated` and `comments.nodes.databaseId`.
+- [x] Add parser tests for each REST method over a two-page payload.
+- [x] Add tests for malformed entries and a missing `user` object.
+- [x] Add a paginated GraphQL parse test and a `--hostname` test for an enterprise repo.
+- [x] Run `uv run pytest tests/test_gh.py` and `uv run ruff check src tests`.
 
 ## Phase 3: Comment export
 

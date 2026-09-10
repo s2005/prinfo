@@ -141,7 +141,7 @@ Expected: `comments.json`, `comments.md` and `commit-log.json` written; no `comm
 
 The feature can be accepted when all items are true:
 
-- [ ] AC-1 - the three REST client methods parse a fake paginated payload into the documented fields and raise `GhCliError` naming the endpoint on a non-object entry - verified by: Phase 2 verification, `uv run pytest tests/test_gh.py`
+- [x] AC-1 - the three REST client methods parse a fake paginated payload into the documented fields and raise `GhCliError` naming the endpoint on a non-object entry - verified by: Phase 2 verification, `uv run pytest tests/test_gh.py`
 - [ ] AC-2 - `comments.json` holds every record from all three REST sources with `author`, `author_type` and per-source `counts` - verified by: Phase 3 verification
 - [ ] AC-3 - `comments.md` sections are in timestamp order with the untimestamped entry last and no exception raised - verified by: Phase 3 verification
 - [ ] AC-4 - `--export-commit-log` alone writes `commit-log.json` and downloads nothing; combined with `--export-commit-files` both outputs exist and the commits endpoint is called once - verified by: Phase 4 verification

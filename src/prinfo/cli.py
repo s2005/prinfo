@@ -26,7 +26,7 @@ from prinfo.gh import GhCli, GhCliError
 class _ModeRun:
     name: str
     result: object | None
-    error: ExportError | None
+    error: ExportError | GhCliError | None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -127,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for name, run_mode in modes:
             try:
                 result = run_mode()
-            except ExportError as exc:
+            except (ExportError, GhCliError) as exc:
                 runs.append(_ModeRun(name=name, result=None, error=exc))
             else:
                 runs.append(_ModeRun(name=name, result=result, error=None))

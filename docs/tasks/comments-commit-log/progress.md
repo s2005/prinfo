@@ -135,6 +135,6 @@ alone because no requirement in this task covers it:
   `PRINFO_EXPORT_COMMIT_FILES` and `PRINFO_SKIP_CHECK_LOGS`. Same reasoning: the
   omission predates this task.
 
-## Review Feedback
+## Review Feedback (PR #2)
 
-(Section appears when PR review feedback arrives. Each comment gets a checkbox.)
+- [x] P1: Catch GitHub errors inside each export mode (fixed - the per-mode loop in `main` now records `GhCliError` alongside `ExportError`, so a `gh` API or permission failure in one mode no longer aborts the remaining requested modes)

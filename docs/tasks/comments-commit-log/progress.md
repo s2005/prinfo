@@ -85,18 +85,18 @@ Requirements: REQ-4
 
 Requirements: REQ-6, REQ-8
 
-- [ ] Replace the parallel result and error locals in `main` with a per-mode record list.
-- [ ] Run each requested mode in its own `try` with per-mode error recording.
-- [ ] Raise only when no mode produced a result.
-- [ ] Log a per-mode summary covering all four modes.
-- [ ] Bump `__version__` to `0.4.0`.
-- [ ] Update `README.md` with both flags, both env keys, the three new output files and the relaxed skip rule.
-- [ ] Update `skills/prinfo/SKILL.md`.
-- [ ] Update `skills/prinfo/references/commands.md`.
-- [ ] Update `skills/prinfo/references/outputs.md`.
-- [ ] Add CLI tests for partial-failure exit 0 and total-failure exit 1.
-- [ ] Update the `--version` test to `0.4.0`.
-- [ ] Run `uv run pytest`, `uv run ruff check .` and `markdownlint-cli2 "**/*.md" "#node_modules"`.
+- [x] Replace the parallel result and error locals in `main` with a per-mode record list.
+- [x] Run each requested mode in its own `try` with per-mode error recording.
+- [x] Raise only when no mode produced a result.
+- [x] Log a per-mode summary covering all four modes.
+- [x] Bump `__version__` to `0.4.0`.
+- [x] Update `README.md` with both flags, both env keys, the three new output files and the relaxed skip rule.
+- [x] Update `skills/prinfo/SKILL.md`.
+- [x] Update `skills/prinfo/references/commands.md`.
+- [x] Update `skills/prinfo/references/outputs.md`.
+- [x] Add CLI tests for partial-failure exit 0 and total-failure exit 1.
+- [x] Update the `--version` test to `0.4.0`.
+- [x] Run `uv run pytest`, `uv run ruff check .` and `markdownlint-cli2 "**/*.md" "#node_modules"`.
 
 ## Review Feedback
 

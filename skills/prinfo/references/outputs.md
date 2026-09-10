@@ -7,6 +7,9 @@
 
 - `manifest.json`
 - one `*.log` file for each exported GitHub Actions job
+- `comments.json`, produced by `--export-comments`
+- `comments.md`, produced by `--export-comments`
+- `commit-log.json`, produced by `--export-commit-log`
 
 When `--skip-empty-logs` is used, empty logs are still recorded in
 `manifest.json` but no zero-byte `.log` file is written for them.
@@ -79,12 +82,71 @@ If an `exported` entry has `has_log_content: false`, check:
 - `saved` to determine whether a zero-byte file was written
 - `path` to see whether a file exists on disk for that entry
 
+## Comment manifest structure
+
+`comments.json` has eight top-level keys:
+
+- `repo`
+- `pr_number`
+- `issue_comments`
+- `review_comments`
+- `reviews`
+- `review_threads`
+- `counts`
+- `skipped_sources`
+
+An issue comment carries `author` and `author_type`, along with the fields
+returned by the `issues/<n>/comments` endpoint.
+
+A review comment carries `author`, `author_type`, `path`, `line`, `side`,
+`in_reply_to_id`, `diff_hunk`, `is_resolved`, and `thread_id`.
+
+A review carries `author`, `author_type`, and `state`, along with the other
+fields returned by the `pulls/<n>/reviews` endpoint.
+
+A review thread carries `thread_id`, `is_resolved`, `is_outdated`, and
+`comment_ids`.
+
+`counts` holds the per-source record count under the keys `issue_comments`,
+`review_comments`, `reviews`, and `review_threads`.
+
+A `skipped_sources` entry carries `source`, `reason_code`, and `reason`.
+
+## Comment transcript structure
+
+`comments.md` is ordered by timestamp across all sources, with untimestamped
+entries last. Each section heading names the author, the source kind, and the
+timestamp. A review heading also carries its state, and an inline review
+comment heading carries `path:line` and its resolved state when a review
+thread matched it. Bodies are reproduced verbatim.
+
+## Commit log structure
+
+`commit-log.json` has four top-level keys:
+
+- `repo`
+- `pr_number`
+- `commit_count`
+- `commits`
+
+Each entry in `commits` carries seven fields: `sha`, `short_sha`,
+`message_headline`, `message`, `authored_date`, `committed_date`, and `url`.
+
+## How to explain a skipped comment source
+
+Use the recorded `source`, `reason_code`, and `reason` in `skipped_sources`
+instead of guessing. A `review_threads` entry means resolved state is simply
+unavailable for that run, while the REST comments (issue comments, review
+comments, and reviews) still exported.
+
 ## When the command fails instead of writing output
 
 Expect the command to fail when:
 
 - no checks are found for the PR
 - checks exist, but none expose downloadable job logs
+- every comment source failed during `--export-comments`
+- the PR has no commits during `--export-commit-log`
 
 In that case, explain the failure and suggest the next verification step, such
 as checking whether the PR relies on external CI instead of GitHub Actions.

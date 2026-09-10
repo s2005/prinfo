@@ -1,22 +1,27 @@
 ---
 name: prinfo
-description: Use this skill when the user wants to run, troubleshoot, or interpret the prinfo CLI for GitHub pull request checks. Activate for requests about exporting PR check logs, GitHub Actions job logs, manifest.json, skipped checks, gh authentication context, or prinfo command arguments and env-file settings.
+description: Use this skill when the user wants to run, troubleshoot, or interpret the prinfo CLI for GitHub pull request checks. Activate for requests about exporting PR check logs, GitHub Actions job logs, manifest.json, skipped checks, gh authentication context, prinfo command arguments and env-file settings, PR comments, review threads, resolved state, comments.json, comments.md, or commit-log.json.
 ---
 
 # prinfo Skill
 
 Run and interpret `prinfo`, a Python CLI that exports GitHub pull request
 check logs through the GitHub CLI and can also export PR commit files into
-per-commit folders.
+per-commit folders, export the PR review discussion, and export the commit
+log.
 
 ## Use This Skill When
 
 - Export PR check logs for a specific pull request.
 - Export PR commit files for a specific pull request.
+- Export the PR review discussion (issue comments, review comments, reviews,
+  and review-thread resolved state) for a specific pull request.
+- Export the PR commit log for a specific pull request.
 - Build the right `prinfo` command for a repo, PR number, or auth context.
 - Troubleshoot missing logs, skipped checks, or `gh` authentication problems.
 - Explain the files written by `prinfo`, especially `manifest.json`,
-  `commits-manifest.json`, and per-commit `_commit.json` files.
+  `commits-manifest.json`, per-commit `_commit.json` files, `comments.json`,
+  `comments.md`, and `commit-log.json`.
 
 ## Quick Workflow
 
@@ -32,15 +37,19 @@ per-commit folders.
 5. Decide whether empty logs should be written as zero-byte files or recorded
    only in `manifest.json` with `--skip-empty-logs`.
 6. Decide whether commit export is needed with `--export-commit-files`.
-7. If commit export is requested, decide whether the user wants commit-only
-   output with `--skip-check-logs`.
-8. Run `uv run prinfo ...` from this repository when possible.
-9. Inspect `manifest.json`, `commits-manifest.json`, exported logs,
-   per-commit folders, and skipped entries.
-10. Explain any failure in one of these buckets:
-   configuration, repository resolution, PR checks not found, unsupported
-   checks, log download failure, commit listing failure, or commit file
-   download failure.
+7. Decide whether the PR review discussion is needed with `--export-comments`.
+8. Decide whether the commit log alone is needed with `--export-commit-log`.
+9. If any export mode is requested, decide whether the user wants an
+   export-only run with `--skip-check-logs`.
+10. Run `uv run prinfo ...` from this repository when possible.
+11. Inspect `manifest.json`, `commits-manifest.json`, exported logs,
+    per-commit folders, `comments.json`, `comments.md`, `commit-log.json`,
+    and skipped entries.
+12. Explain any failure in one of these buckets:
+    configuration, repository resolution, PR checks not found, unsupported
+    checks, log download failure, commit listing failure, commit file
+    download failure, a skipped comment source, a failed GraphQL
+    review-thread call, or no export mode producing a result.
 
 ## Critical Constraints
 
@@ -54,6 +63,12 @@ per-commit folders.
 - Remember that CLI arguments override env-file values.
 - Remember that `prinfo` does not mutate the user's global `gh` login state.
 - Use `OWNER/REPO` for GitHub.com or `HOST/OWNER/REPO` for GitHub Enterprise.
+- Comments are exported verbatim, with no bot filtering.
+- Review-thread resolved state comes from a GraphQL call and may be absent;
+  when it fails, every review comment is left with `is_resolved` unset.
+- `--export-commit-log` downloads no file content, only commit metadata.
+- `--skip-check-logs` needs at least one export mode
+  (`--export-commit-files`, `--export-comments`, or `--export-commit-log`).
 
 ## Working Rules
 
@@ -70,6 +85,10 @@ per-commit folders.
   failed.
 - If the user asks about deleted or renamed files in commit export, inspect the
   per-commit `_commit.json` manifest before guessing.
+- If the user asks why a comment export looks incomplete, inspect
+  `skipped_sources` in `comments.json` before concluding the export failed.
+- If the user wants commit history rather than file content, choose
+  `--export-commit-log` over `--export-commit-files`.
 
 ## Bundled References
 

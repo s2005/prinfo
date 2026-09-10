@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -7,7 +8,18 @@ from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 
 from prinfo.config import AppConfig
-from prinfo.gh import CheckRun, CommitDetails, CommitFile, GhCli, GhCliError, parse_repo_ref
+from prinfo.gh import (
+    CheckRun,
+    CommitDetails,
+    CommitFile,
+    GhCli,
+    GhCliError,
+    IssueComment,
+    PullRequestReview,
+    ReviewComment,
+    ReviewThread,
+    parse_repo_ref,
+)
 
 LOGGER = logging.getLogger(__name__)
 FILENAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -37,6 +49,20 @@ class CommitExportResult:
     commit_count: int
     exported_files: int
     skipped_files: int
+
+
+@dataclass(frozen=True)
+class CommentExportResult:
+    repo: str
+    pr_number: int
+    output_dir: Path
+    manifest_path: Path
+    transcript_path: Path
+    issue_comment_count: int
+    review_comment_count: int
+    review_count: int
+    review_thread_count: int
+    skipped_sources: int
 
 
 def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
@@ -144,6 +170,115 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
         exported_logs=saved_logs,
         manifest_only_logs=manifest_only_logs,
         skipped_checks=len(skipped),
+    )
+
+
+def export_pr_comments(config: AppConfig, gh: GhCli) -> CommentExportResult:
+    gh.ensure_available()
+
+    repo_name = config.repo or gh.detect_repo()
+    repo_ref = parse_repo_ref(repo_name, config.gh_host)
+
+    skipped_sources: list[dict[str, object]] = []
+
+    issue_comments: list[IssueComment] = []
+    try:
+        issue_comments = gh.list_pr_issue_comments(repo_ref.full_name, config.pr_number)
+    except GhCliError as exc:
+        LOGGER.warning("Skipping issue comments for PR #%s: %s", config.pr_number, exc)
+        skipped_sources.append(
+            _skipped_source_record(source="issue_comments", reason=str(exc), reason_code="source_unavailable")
+        )
+
+    review_comments: list[ReviewComment] = []
+    try:
+        review_comments = gh.list_pr_review_comments(repo_ref.full_name, config.pr_number)
+    except GhCliError as exc:
+        LOGGER.warning("Skipping review comments for PR #%s: %s", config.pr_number, exc)
+        skipped_sources.append(
+            _skipped_source_record(source="review_comments", reason=str(exc), reason_code="source_unavailable")
+        )
+
+    reviews: list[PullRequestReview] = []
+    try:
+        reviews = gh.list_pr_reviews(repo_ref.full_name, config.pr_number)
+    except GhCliError as exc:
+        LOGGER.warning("Skipping reviews for PR #%s: %s", config.pr_number, exc)
+        skipped_sources.append(
+            _skipped_source_record(source="reviews", reason=str(exc), reason_code="source_unavailable")
+        )
+
+    review_threads: list[ReviewThread] = []
+    try:
+        review_threads = gh.list_pr_review_threads(repo_ref.full_name, config.pr_number)
+    except GhCliError as exc:
+        LOGGER.warning("Skipping review threads for PR #%s: %s", config.pr_number, exc)
+        skipped_sources.append(
+            _skipped_source_record(source="review_threads", reason=str(exc), reason_code="source_unavailable")
+        )
+
+    if len(skipped_sources) == 4:
+        raise ExportError(f"No comment data could be exported for PR #{config.pr_number} in {repo_ref.full_name}.")
+
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    threads_by_comment_id: dict[int, ReviewThread] = {}
+    for thread in review_threads:
+        for comment_id in thread.comment_ids:
+            threads_by_comment_id[comment_id] = thread
+
+    resolved_review_comments: list[ReviewComment] = []
+    for comment in review_comments:
+        thread = threads_by_comment_id.get(comment.comment_id)
+        if thread is not None:
+            resolved_review_comments.append(
+                dataclasses.replace(comment, is_resolved=thread.is_resolved, thread_id=thread.thread_id)
+            )
+        else:
+            resolved_review_comments.append(comment)
+    review_comments = resolved_review_comments
+
+    counts = {
+        "issue_comments": len(issue_comments),
+        "review_comments": len(review_comments),
+        "reviews": len(reviews),
+        "review_threads": len(review_threads),
+    }
+
+    comments_payload = {
+        "repo": repo_ref.full_name,
+        "pr_number": config.pr_number,
+        "issue_comments": [asdict(comment) for comment in issue_comments],
+        "review_comments": [asdict(comment) for comment in review_comments],
+        "reviews": [asdict(review) for review in reviews],
+        "review_threads": [asdict(thread) for thread in review_threads],
+        "counts": counts,
+        "skipped_sources": skipped_sources,
+    }
+    manifest_path = config.output_dir / "comments.json"
+    manifest_path.write_text(json.dumps(comments_payload, indent=2), encoding="utf-8")
+
+    transcript = _render_comments_markdown(
+        repo=repo_ref.full_name,
+        pr_number=config.pr_number,
+        issue_comments=issue_comments,
+        review_comments=review_comments,
+        reviews=reviews,
+    )
+    transcript_path = config.output_dir / "comments.md"
+    transcript_path.write_text(transcript, encoding="utf-8")
+
+    return CommentExportResult(
+        repo=repo_ref.full_name,
+        pr_number=config.pr_number,
+        output_dir=config.output_dir,
+        manifest_path=manifest_path,
+        transcript_path=transcript_path,
+        issue_comment_count=len(issue_comments),
+        review_comment_count=len(review_comments),
+        review_count=len(reviews),
+        review_thread_count=len(review_threads),
+        skipped_sources=len(skipped_sources),
     )
 
 
@@ -353,6 +488,74 @@ def _skipped_record(*, check: CheckRun, reason: str, reason_code: str) -> dict[s
         "reason_code": reason_code,
         "reason": reason,
     }
+
+
+def _skipped_source_record(*, source: str, reason: str, reason_code: str) -> dict[str, object]:
+    return {
+        "source": source,
+        "reason_code": reason_code,
+        "reason": reason,
+    }
+
+
+def _render_comments_markdown(
+    *,
+    repo: str,
+    pr_number: int,
+    issue_comments: list[IssueComment],
+    review_comments: list[ReviewComment],
+    reviews: list[PullRequestReview],
+) -> str:
+    entries: list[tuple[tuple[bool, str], str]] = []
+
+    for comment in issue_comments:
+        heading = _comment_heading(author=comment.author, kind="issue comment", timestamp=comment.created_at)
+        body = _comment_body(comment.body)
+        entries.append((_sort_key(comment.created_at), f"## {heading}\n\n{body}"))
+
+    for comment in review_comments:
+        kind = "review comment"
+        if comment.path:
+            line = comment.line if comment.line is not None else comment.original_line
+            if line is not None:
+                kind = f"{kind} on {comment.path}:{line}"
+            else:
+                kind = f"{kind} on {comment.path}"
+        if comment.is_resolved is True:
+            kind = f"{kind} (resolved)"
+        elif comment.is_resolved is False:
+            kind = f"{kind} (unresolved)"
+        heading = _comment_heading(author=comment.author, kind=kind, timestamp=comment.created_at)
+        body = _comment_body(comment.body)
+        entries.append((_sort_key(comment.created_at), f"## {heading}\n\n{body}"))
+
+    for review in reviews:
+        kind = f"review ({review.state})" if review.state is not None else "review"
+        heading = _comment_heading(author=review.author, kind=kind, timestamp=review.submitted_at)
+        body = _comment_body(review.body)
+        entries.append((_sort_key(review.submitted_at), f"## {heading}\n\n{body}"))
+
+    entries.sort(key=lambda entry: entry[0])
+
+    sections = [f"# Comments for {repo} PR #{pr_number}"]
+    sections.extend(entry[1] for entry in entries)
+    return "\n\n".join(sections) + "\n"
+
+
+def _sort_key(timestamp: str | None) -> tuple[bool, str]:
+    return (timestamp is None, timestamp or "")
+
+
+def _comment_heading(*, author: str | None, kind: str, timestamp: str | None) -> str:
+    author_text = author or "unknown author"
+    timestamp_text = timestamp or "unknown time"
+    return f"{author_text} - {kind} - {timestamp_text}"
+
+
+def _comment_body(body: str | None) -> str:
+    if not body:
+        return "(no body)"
+    return body
 
 
 def _exported_commit_file_record(

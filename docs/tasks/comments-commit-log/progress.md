@@ -54,20 +54,20 @@ Requirements: REQ-1, REQ-7
 
 Requirements: REQ-2, REQ-3, REQ-6, REQ-7
 
-- [ ] Add `CommentExportResult`.
-- [ ] Add `export_pr_comments` calling all four sources with per-source error isolation.
-- [ ] Add `_skipped_source_record` following the existing skipped-record convention.
-- [ ] Raise `ExportError` when every source failed.
-- [ ] Map review threads onto review comments by comment id.
-- [ ] Write `comments.json` with all documented keys and per-source counts.
-- [ ] Add `_render_comments_markdown` with timestamp ordering and untimestamped entries last.
-- [ ] Write `comments.md` with `encoding="utf-8"`.
-- [ ] Add exporter tests for the JSON contents and counts.
-- [ ] Add exporter tests for transcript ordering.
-- [ ] Add exporter tests for one-source failure and total failure.
-- [ ] Add exporter tests for thread mapping, matched and unmatched.
-- [ ] Add an exporter test for an isolated GraphQL failure.
-- [ ] Run `uv run pytest tests/test_exporter.py`.
+- [x] Add `CommentExportResult`.
+- [x] Add `export_pr_comments` calling all four sources with per-source error isolation.
+- [x] Add `_skipped_source_record` following the existing skipped-record convention.
+- [x] Raise `ExportError` when every source failed.
+- [x] Map review threads onto review comments by comment id.
+- [x] Write `comments.json` with all documented keys and per-source counts.
+- [x] Add `_render_comments_markdown` with timestamp ordering and untimestamped entries last.
+- [x] Write `comments.md` with `encoding="utf-8"`.
+- [x] Add exporter tests for the JSON contents and counts.
+- [x] Add exporter tests for transcript ordering.
+- [x] Add exporter tests for one-source failure and total failure.
+- [x] Add exporter tests for thread mapping, matched and unmatched.
+- [x] Add an exporter test for an isolated GraphQL failure.
+- [x] Run `uv run pytest tests/test_exporter.py`.
 
 ## Phase 4: Commit log export
 

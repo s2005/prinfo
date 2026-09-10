@@ -142,14 +142,14 @@ Expected: `comments.json`, `comments.md` and `commit-log.json` written; no `comm
 The feature can be accepted when all items are true:
 
 - [x] AC-1 - the three REST client methods parse a fake paginated payload into the documented fields and raise `GhCliError` naming the endpoint on a non-object entry - verified by: Phase 2 verification, `uv run pytest tests/test_gh.py`
-- [ ] AC-2 - `comments.json` holds every record from all three REST sources with `author`, `author_type` and per-source `counts` - verified by: Phase 3 verification
-- [ ] AC-3 - `comments.md` sections are in timestamp order with the untimestamped entry last and no exception raised - verified by: Phase 3 verification
+- [x] AC-2 - `comments.json` holds every record from all three REST sources with `author`, `author_type` and per-source `counts` - verified by: Phase 3 verification
+- [x] AC-3 - `comments.md` sections are in timestamp order with the untimestamped entry last and no exception raised - verified by: Phase 3 verification
 - [ ] AC-4 - `--export-commit-log` alone writes `commit-log.json` and downloads nothing; combined with `--export-commit-files` both outputs exist and the commits endpoint is called once - verified by: Phase 4 verification
 - [x] AC-5 - `build_parser` accepts both flags and `resolve_config` maps both env keys with CLI winning - verified by: Phase 1 verification
 - [x] AC-6 - `--skip-check-logs` is accepted with any single export mode and rejected with none set, the message naming all three - verified by: Phase 1 verification, including the live `ConfigurationError` command
-- [ ] AC-7 - one failing comment source leaves the others exported and is recorded with a `reason_code`; all sources failing raises `ExportError` - verified by: Phase 3 verification
+- [x] AC-7 - one failing comment source leaves the others exported and is recorded with a `reason_code`; all sources failing raises `ExportError` - verified by: Phase 3 verification
 - [ ] AC-8 - `main` returns 0 on partial failure and 1 when every requested mode fails - verified by: Phase 5 verification
-- [ ] AC-9 - `list_pr_review_threads` parses paginated GraphQL into `ReviewThread` records and thread state lands on matching review comments, unmatched staying `None` - verified by: Phase 2 and Phase 3 verification
-- [ ] AC-10 - a GraphQL failure is recorded in `skipped_sources` while all three REST sources still export - verified by: Phase 3 verification
+- [x] AC-9 - `list_pr_review_threads` parses paginated GraphQL into `ReviewThread` records and thread state lands on matching review comments, unmatched staying `None` - verified by: Phase 2 and Phase 3 verification
+- [x] AC-10 - a GraphQL failure is recorded in `skipped_sources` while all three REST sources still export - verified by: Phase 3 verification
 - [ ] AC-11 - `README.md` documents both flags, both env keys and all three new output files, and the Markdown linter is clean - verified by: Markdown Linter section
 - [ ] AC-12 - `uv run ruff check .` and `uv run pytest` both pass - verified by: Linter and Regression Check sections

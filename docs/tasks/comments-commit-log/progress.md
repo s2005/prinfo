@@ -134,9 +134,19 @@ alone because no requirement in this task covers it:
 - `skills/prinfo/references/commands.md` lists supported env keys without
   `PRINFO_EXPORT_COMMIT_FILES` and `PRINFO_SKIP_CHECK_LOGS`. Same reasoning: the
   omission predates this task.
+- The `repos/<owner>/<repo>/pulls/<n>/commits` endpoint behind
+  `GhCli.list_pr_commits` returns at most 250 commits, so both
+  `commits-manifest.json` and the new `commit-log.json` silently truncate a
+  larger PR and report `commit_count: 250`. The call and the cap arrived in
+  `cbf07b8`, the merge base of this branch, and this task reuses that fetch
+  rather than adding a new one, so it does not make the gap worse. Choosing
+  between the general commits endpoint and an explicit failure changes
+  `--export-commit-files` behaviour and needs its own ticket. Raised by Codex
+  on PR #2, see `analysis_4_commits_endpoint_250_limit.md`.
 
 ## Review Feedback (PR #2)
 
 - [x] P1: Catch GitHub errors inside each export mode (fixed - the per-mode loop in `main` now records `GhCliError` alongside `ExportError`, so a `gh` API or permission failure in one mode no longer aborts the remaining requested modes)
 - [x] P2: Isolate filesystem errors between export modes (fixed - the per-mode loop in `main` now records `OSError` alongside `ExportError` and `GhCliError`, so a filesystem failure in one mode no longer aborts the remaining requested modes)
 - [x] P2: Preserve empty comment bodies in the transcript (fixed - `_comment_body` now reserves the `(no body)` placeholder for `None` and renders an empty body as an empty section, matching `comments.json`)
+- [-] P4: Handle pull requests with more than 250 commits (rejected - the 250-commit cap predates this branch in `GhCli.list_pr_commits` and already truncates `commits-manifest.json` on `main`; recorded as a follow-up ticket)

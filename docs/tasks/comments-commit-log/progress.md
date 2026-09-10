@@ -138,3 +138,5 @@ alone because no requirement in this task covers it:
 ## Review Feedback (PR #2)
 
 - [x] P1: Catch GitHub errors inside each export mode (fixed - the per-mode loop in `main` now records `GhCliError` alongside `ExportError`, so a `gh` API or permission failure in one mode no longer aborts the remaining requested modes)
+- [x] P2: Isolate filesystem errors between export modes (fixed - the per-mode loop in `main` now records `OSError` alongside `ExportError` and `GhCliError`, so a filesystem failure in one mode no longer aborts the remaining requested modes)
+- [x] P2: Preserve empty comment bodies in the transcript (fixed - `_comment_body` now reserves the `(no body)` placeholder for `None` and renders an empty body as an empty section, matching `comments.json`)

@@ -918,6 +918,46 @@ def test_export_pr_comments_writes_transcript_in_timestamp_order(tmp_path: Path)
     assert first_position < second_position < no_timestamp_position
 
 
+def test_export_pr_comments_transcript_preserves_an_empty_body(tmp_path: Path) -> None:
+    """P2: an empty body must stay empty instead of becoming the (no body) placeholder."""
+    config = _comments_config(tmp_path=tmp_path)
+    reviews = [
+        PullRequestReview(
+            review_id=100,
+            author="bob",
+            author_type="User",
+            body="",
+            state="COMMENTED",
+            submitted_at="2024-01-02T00:00:01Z",
+            url=None,
+            commit_id="abc123",
+        ),
+    ]
+    issue_comments = [
+        IssueComment(
+            comment_id=1,
+            author="alice",
+            author_type="User",
+            body=None,
+            created_at="2024-01-01T00:00:00Z",
+            updated_at=None,
+            url=None,
+        ),
+    ]
+    gh = FakeGhCli(issue_comments=issue_comments, reviews=reviews)
+
+    export_pr_comments(config, gh)
+
+    transcript = (config.output_dir / "comments.md").read_text(encoding="utf-8")
+    lines = transcript.splitlines()
+    review_index = lines.index("## bob - review (COMMENTED) - 2024-01-02T00:00:01Z")
+    assert lines[review_index + 1] == ""
+    assert lines[review_index + 2] == ""
+    comment_index = lines.index("## alice - issue comment - 2024-01-01T00:00:00Z")
+    assert lines[comment_index + 2] == "(no body)"
+    assert transcript.count("(no body)") == 1
+
+
 def test_export_pr_comments_records_a_failing_source_and_exports_the_rest(tmp_path: Path) -> None:
     config = _comments_config(tmp_path=tmp_path)
     issue_comment = IssueComment(

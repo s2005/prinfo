@@ -622,7 +622,7 @@ def _comment_heading(*, author: str | None, kind: str, timestamp: str | None) ->
 
 
 def _comment_body(body: str | None) -> str:
-    if not body:
+    if body is None:
         return "(no body)"
     return body
 

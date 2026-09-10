@@ -226,6 +226,73 @@ def test_main_continues_other_modes_when_one_mode_raises_gh_cli_error(
     assert "gh api boom" in caplog.text
 
 
+def test_main_continues_other_modes_when_one_mode_raises_os_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """P2: an OSError from one export mode must not abort the remaining modes."""
+    config = _make_config(export_comments=True, export_commit_log=True)
+    calls: list[str] = []
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_comments(config_arg, gh_arg):
+        calls.append("comments")
+        raise IsADirectoryError("comments.json is a directory")
+
+    def fake_export_pr_commit_log(config_arg, gh_arg, commits_cache_arg=None):
+        calls.append("commit_log")
+        return type(
+            "CommitLogResult",
+            (),
+            {
+                "commit_count": 3,
+                "pr_number": 1,
+                "repo": "octo/repo",
+                "output_dir": "out",
+            },
+        )()
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_comments", fake_export_pr_comments)
+    monkeypatch.setattr("prinfo.cli.export_pr_commit_log", fake_export_pr_commit_log)
+
+    with caplog.at_level(logging.WARNING):
+        exit_code = main(["--pr", "1", "--export-comments", "--export-commit-log"])
+
+    assert exit_code == 0
+    assert set(calls) == {"comments", "commit_log"}
+    assert "comments.json is a directory" in caplog.text
+
+
+def test_main_returns_one_when_every_mode_raises_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P2: an OSError in every requested mode still exits non-zero."""
+    config = _make_config(export_comments=True, export_commit_log=True)
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_comments(config_arg, gh_arg):
+        raise IsADirectoryError("comments.json is a directory")
+
+    def fake_export_pr_commit_log(config_arg, gh_arg, commits_cache_arg=None):
+        raise PermissionError("commit-log.json is not writable")
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_comments", fake_export_pr_comments)
+    monkeypatch.setattr("prinfo.cli.export_pr_commit_log", fake_export_pr_commit_log)
+
+    exit_code = main(["--pr", "1", "--export-comments", "--export-commit-log"])
+
+    assert exit_code == 1
+
+
 def test_main_returns_one_when_every_requested_mode_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

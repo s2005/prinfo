@@ -1,10 +1,11 @@
 import logging
+from pathlib import Path
 
 import pytest
 
 from prinfo import __version__
 from prinfo.cli import build_parser, main
-from prinfo.exporter import ExportError
+from prinfo.exporter import CommitExportResult, ExportError
 from prinfo.gh import GhCliError
 
 
@@ -377,3 +378,40 @@ def test_version_reports_expected_release(capsys: pytest.CaptureFixture[str]) ->
 
     captured = capsys.readouterr()
     assert captured.out.strip() == "prinfo 0.4.0"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="the commit summary warns on any skip, so a PR that only deletes files "
+    "produces a WARNING that needs no action",
+)
+def test_main_does_not_warn_when_every_commit_skip_is_benign(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _make_config(export_commit_files=True)
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_commit_files(config_arg, gh_arg, commits_cache_arg=None):
+        return CommitExportResult(
+            repo="octo/repo",
+            pr_number=1,
+            output_dir=Path("out"),
+            manifest_path=Path("out/commits-manifest.json"),
+            commit_count=1,
+            exported_files=4,
+            skipped_files=8,
+        )
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_commit_files", fake_export_pr_commit_files)
+
+    with caplog.at_level(logging.WARNING):
+        exit_code = main(["--pr", "1", "--export-commit-files"])
+
+    assert exit_code == 0
+    # All eight skips are deleted files, which is normal and needs no user action.
+    assert "Skipped 8 commit file(s)." not in caplog.text

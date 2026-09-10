@@ -15,6 +15,24 @@ JOB_URL_RE = re.compile(
 )
 LOGGER = logging.getLogger(__name__)
 
+REVIEW_THREADS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $endCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          isResolved
+          isOutdated
+          comments(first: 100) { nodes { databaseId } }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 class GhCliError(RuntimeError):
     """Raised when gh CLI interaction fails."""
@@ -38,9 +56,67 @@ class PrCommit:
     short_sha: str
     message_headline: str
     message: str
+    author_name: str | None
+    author_email: str | None
+    author_login: str | None
     authored_date: str | None
+    committer_name: str | None
+    committer_email: str | None
+    committer_login: str | None
     committed_date: str | None
     url: str | None
+
+
+@dataclass(frozen=True)
+class IssueComment:
+    comment_id: int
+    author: str | None
+    author_type: str | None
+    body: str | None
+    created_at: str | None
+    updated_at: str | None
+    url: str | None
+
+
+@dataclass(frozen=True)
+class ReviewComment:
+    comment_id: int
+    author: str | None
+    author_type: str | None
+    body: str | None
+    created_at: str | None
+    updated_at: str | None
+    url: str | None
+    path: str | None
+    line: int | None
+    original_line: int | None
+    side: str | None
+    commit_id: str | None
+    in_reply_to_id: int | None
+    diff_hunk: str | None
+    pull_request_review_id: int | None
+    is_resolved: bool | None = None
+    thread_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PullRequestReview:
+    review_id: int
+    author: str | None
+    author_type: str | None
+    body: str | None
+    state: str | None
+    submitted_at: str | None
+    url: str | None
+    commit_id: str | None
+
+
+@dataclass(frozen=True)
+class ReviewThread:
+    thread_id: str
+    is_resolved: bool | None
+    is_outdated: bool | None
+    comment_ids: list[int]
 
 
 @dataclass(frozen=True)
@@ -138,6 +214,55 @@ class GhCli:
             commits.append(_parse_pr_commit(raw_commit))
         return commits
 
+    def list_pr_issue_comments(self, repo: str, pr_number: int) -> list[IssueComment]:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        endpoint = f"repos/{repo_ref.owner}/{repo_ref.name}/issues/{pr_number}/comments"
+        comment_pages = self._run_paginated_json(host=repo_ref.host, endpoint=endpoint)
+
+        comments: list[IssueComment] = []
+        for raw_comment in comment_pages:
+            comments.append(_parse_issue_comment(raw_comment, endpoint=endpoint))
+        return comments
+
+    def list_pr_review_comments(self, repo: str, pr_number: int) -> list[ReviewComment]:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        endpoint = f"repos/{repo_ref.owner}/{repo_ref.name}/pulls/{pr_number}/comments"
+        comment_pages = self._run_paginated_json(host=repo_ref.host, endpoint=endpoint)
+
+        comments: list[ReviewComment] = []
+        for raw_comment in comment_pages:
+            comments.append(_parse_review_comment(raw_comment, endpoint=endpoint))
+        return comments
+
+    def list_pr_reviews(self, repo: str, pr_number: int) -> list[PullRequestReview]:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        endpoint = f"repos/{repo_ref.owner}/{repo_ref.name}/pulls/{pr_number}/reviews"
+        review_pages = self._run_paginated_json(host=repo_ref.host, endpoint=endpoint)
+
+        reviews: list[PullRequestReview] = []
+        for raw_review in review_pages:
+            reviews.append(_parse_review(raw_review, endpoint=endpoint))
+        return reviews
+
+    def list_pr_review_threads(self, repo: str, pr_number: int) -> list[ReviewThread]:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        documents = self._run_graphql_paginated(
+            host=repo_ref.host,
+            query=REVIEW_THREADS_QUERY,
+            variables={
+                "owner": repo_ref.owner,
+                "name": repo_ref.name,
+                "number": pr_number,
+            },
+        )
+
+        threads: list[ReviewThread] = []
+        for document in documents:
+            nodes = _extract_review_thread_nodes(document)
+            for raw_node in nodes:
+                threads.append(_parse_review_thread(raw_node))
+        return threads
+
     def get_commit_details(self, repo: RepoRef, sha: str) -> CommitDetails:
         endpoint = f"repos/{repo.owner}/{repo.name}/commits/{sha}"
         detail_pages = self._run_paginated_json(host=repo.host, endpoint=endpoint)
@@ -221,6 +346,37 @@ class GhCli:
                     )
                 items.append(entry)
         return items
+
+    def _run_graphql_paginated(
+        self, *, host: str, query: str, variables: dict[str, object]
+    ) -> list[dict[str, object]]:
+        command = ["api", "graphql", "--hostname", host, "--paginate", "-f", f"query={query}"]
+        for key in sorted(variables):
+            command.extend(["-F", f"{key}={variables[key]}"])
+
+        output = self._run_text(command)
+        stripped_output = output.strip()
+        if not stripped_output:
+            return []
+
+        try:
+            parsed = json.loads(output)
+        except json.JSONDecodeError:
+            return _decode_graphql_documents(stripped_output)
+
+        if isinstance(parsed, dict):
+            return [parsed]
+        if isinstance(parsed, list):
+            documents: list[dict[str, object]] = []
+            for entry in parsed:
+                if not isinstance(entry, dict):
+                    raise GhCliError(
+                        f"Expected a GraphQL document object, got {type(entry).__name__}."
+                    )
+                documents.append(entry)
+            return documents
+
+        raise GhCliError(f"Expected a GraphQL document object, got {type(parsed).__name__}.")
 
     def _run_json(self, args: Sequence[str]) -> dict[str, object]:
         data = self._run_json_value(args)
@@ -326,14 +482,185 @@ def _parse_pr_commit(raw_commit: dict[str, object]) -> PrCommit:
     if not isinstance(committer_data, dict):
         committer_data = {}
 
+    top_level_author = raw_commit.get("author")
+    if not isinstance(top_level_author, dict):
+        top_level_author = {}
+    top_level_committer = raw_commit.get("committer")
+    if not isinstance(top_level_committer, dict):
+        top_level_committer = {}
+
     return PrCommit(
         sha=sha,
         short_sha=sha[:7],
         message_headline=message_headline,
         message=message,
+        author_name=_optional_str(author_data.get("name")),
+        author_email=_optional_str(author_data.get("email")),
+        author_login=_optional_str(top_level_author.get("login")),
         authored_date=author_data.get("date"),
+        committer_name=_optional_str(committer_data.get("name")),
+        committer_email=_optional_str(committer_data.get("email")),
+        committer_login=_optional_str(top_level_committer.get("login")),
         committed_date=committer_data.get("date"),
         url=raw_commit.get("html_url"),
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    return None
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _author_fields(raw: dict[str, object]) -> tuple[str | None, str | None]:
+    user_data = raw.get("user")
+    if not isinstance(user_data, dict):
+        return None, None
+    return _optional_str(user_data.get("login")), _optional_str(user_data.get("type"))
+
+
+def _require_id(raw: dict[str, object], *, endpoint: str) -> int:
+    comment_id = _optional_int(raw.get("id"))
+    if comment_id is None:
+        raise GhCliError(f"GitHub did not return an id for an entry from endpoint {endpoint!r}.")
+    return comment_id
+
+
+def _parse_issue_comment(raw: object, *, endpoint: str) -> IssueComment:
+    if not isinstance(raw, dict):
+        raise GhCliError(f"Expected an object entry for endpoint {endpoint!r}, got {type(raw).__name__}.")
+
+    author, author_type = _author_fields(raw)
+    return IssueComment(
+        comment_id=_require_id(raw, endpoint=endpoint),
+        author=author,
+        author_type=author_type,
+        body=_optional_str(raw.get("body")),
+        created_at=_optional_str(raw.get("created_at")),
+        updated_at=_optional_str(raw.get("updated_at")),
+        url=_optional_str(raw.get("html_url")),
+    )
+
+
+def _parse_review_comment(raw: object, *, endpoint: str) -> ReviewComment:
+    if not isinstance(raw, dict):
+        raise GhCliError(f"Expected an object entry for endpoint {endpoint!r}, got {type(raw).__name__}.")
+
+    author, author_type = _author_fields(raw)
+    return ReviewComment(
+        comment_id=_require_id(raw, endpoint=endpoint),
+        author=author,
+        author_type=author_type,
+        body=_optional_str(raw.get("body")),
+        created_at=_optional_str(raw.get("created_at")),
+        updated_at=_optional_str(raw.get("updated_at")),
+        url=_optional_str(raw.get("html_url")),
+        path=_optional_str(raw.get("path")),
+        line=_optional_int(raw.get("line")),
+        original_line=_optional_int(raw.get("original_line")),
+        side=_optional_str(raw.get("side")),
+        commit_id=_optional_str(raw.get("commit_id")),
+        in_reply_to_id=_optional_int(raw.get("in_reply_to_id")),
+        diff_hunk=_optional_str(raw.get("diff_hunk")),
+        pull_request_review_id=_optional_int(raw.get("pull_request_review_id")),
+    )
+
+
+def _parse_review(raw: object, *, endpoint: str) -> PullRequestReview:
+    if not isinstance(raw, dict):
+        raise GhCliError(f"Expected an object entry for endpoint {endpoint!r}, got {type(raw).__name__}.")
+
+    author, author_type = _author_fields(raw)
+    return PullRequestReview(
+        review_id=_require_id(raw, endpoint=endpoint),
+        author=author,
+        author_type=author_type,
+        body=_optional_str(raw.get("body")),
+        state=_optional_str(raw.get("state")),
+        submitted_at=_optional_str(raw.get("submitted_at")),
+        url=_optional_str(raw.get("html_url")),
+        commit_id=_optional_str(raw.get("commit_id")),
+    )
+
+
+def _decode_graphql_documents(stripped_output: str) -> list[dict[str, object]]:
+    decoder = json.JSONDecoder()
+    documents: list[dict[str, object]] = []
+    position = 0
+    length = len(stripped_output)
+
+    while position < length:
+        while position < length and stripped_output[position].isspace():
+            position += 1
+        if position >= length:
+            break
+        try:
+            document, end_position = decoder.raw_decode(stripped_output, position)
+        except json.JSONDecodeError as exc:
+            raise GhCliError(f"Failed to parse GraphQL response from gh: {exc}") from exc
+        if not isinstance(document, dict):
+            raise GhCliError(f"Expected a GraphQL document object, got {type(document).__name__}.")
+        documents.append(document)
+        position = end_position
+
+    return documents
+
+
+def _extract_review_thread_nodes(document: dict[str, object]) -> list[object]:
+    data = document.get("data")
+    if not isinstance(data, dict):
+        return []
+    repository = data.get("repository")
+    if not isinstance(repository, dict):
+        return []
+    pull_request = repository.get("pullRequest")
+    if not isinstance(pull_request, dict):
+        return []
+    review_threads = pull_request.get("reviewThreads")
+    if not isinstance(review_threads, dict):
+        return []
+    nodes = review_threads.get("nodes")
+    if not isinstance(nodes, list):
+        return []
+    return nodes
+
+
+def _parse_review_thread(raw: object) -> ReviewThread:
+    if not isinstance(raw, dict):
+        raise GhCliError(f"Expected a GraphQL review thread object, got {type(raw).__name__}.")
+
+    thread_id = raw.get("id")
+    if thread_id is None:
+        raise GhCliError("GitHub GraphQL did not return an id for a review thread.")
+
+    is_resolved = raw.get("isResolved")
+    is_outdated = raw.get("isOutdated")
+
+    comment_ids: list[int] = []
+    comments_data = raw.get("comments")
+    if isinstance(comments_data, dict):
+        comment_nodes = comments_data.get("nodes")
+        if isinstance(comment_nodes, list):
+            for comment_node in comment_nodes:
+                if not isinstance(comment_node, dict):
+                    continue
+                database_id = _optional_int(comment_node.get("databaseId"))
+                if database_id is not None:
+                    comment_ids.append(database_id)
+
+    return ReviewThread(
+        thread_id=str(thread_id),
+        is_resolved=is_resolved if isinstance(is_resolved, bool) else None,
+        is_outdated=is_outdated if isinstance(is_outdated, bool) else None,
+        comment_ids=comment_ids,
     )
 
 

@@ -103,3 +103,99 @@ Action:
 - verify whether every check is external CI instead of GitHub Actions
 - verify whether all Actions checks lack a downloadable job log
 - inspect the PR checks in GitHub before retrying
+
+## `--skip-check-logs` was rejected
+
+Symptom:
+
+- a configuration error names `--export-commit-files`, `--export-comments`
+  and `--export-commit-log` and their three env keys
+
+Action:
+
+- `--skip-check-logs` only suppresses the check-log export, it is not an
+  export mode on its own
+- add at least one of the three export flags, or set the matching env key
+
+## A comment source was skipped
+
+Symptom:
+
+- `comments.json` has one or more entries under `skipped_sources`
+- the matching entry in `counts` is `0`
+
+Action:
+
+- read the recorded `source`, `reason_code` and `reason` instead of guessing
+- each of the four sources is fetched independently, so the remaining
+  sources still exported
+- a `404` usually means the endpoint is unavailable for that PR or the token
+  cannot read it
+
+## Review comments have no resolved state
+
+Symptom:
+
+- every entry in `review_comments` has `is_resolved` and `thread_id` set to
+  `null`
+
+Action:
+
+- check whether `skipped_sources` holds a `review_threads` entry - if it
+  does, the GraphQL call failed and resolved state is simply unavailable for
+  that run while the three REST sources still exported
+- verify the token can read the repository and that the host supports the
+  `reviewThreads` field
+
+## One review comment has no resolved state while others do
+
+Symptom:
+
+- `review_threads` is populated and most comments carry `is_resolved`, but a
+  few are `null`
+
+Action:
+
+- this is expected, not a failure
+- the comment is not part of a review thread, or its thread reported more
+  than 100 comments and the tail was not returned
+- treat `null` as "no thread matched" rather than "unresolved"
+
+## No comment data was exported
+
+Symptom:
+
+- the command fails saying no comment data could be exported for the PR
+
+Action:
+
+- every one of the four sources failed, which usually points at
+  authentication or repository access rather than the PR
+- verify `gh auth status`, the repository reference and `--gh-host` for
+  GitHub Enterprise
+
+## The commit log export failed
+
+Symptom:
+
+- the command fails saying no commits were found for the PR
+
+Action:
+
+- verify the PR number and repository, and confirm the PR actually has
+  commits
+- `--export-commit-log` downloads no file content, so a failure here is
+  about the commit listing and not about file downloads
+
+## Some export modes succeeded and others failed
+
+Symptom:
+
+- the command exits `0` but a warning names a mode that failed
+
+Action:
+
+- each requested mode runs independently, so the run exits non-zero only
+  when no mode produced a result
+- read the per-mode warning to see which one failed and treat the exported
+  outputs of the other modes as valid

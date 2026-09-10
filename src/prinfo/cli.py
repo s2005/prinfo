@@ -2,16 +2,31 @@ from __future__ import annotations
 
 import argparse
 import logging
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Callable, Sequence
 
 from prinfo import __version__
 from prinfo.config import ConfigurationError, resolve_config
 from prinfo.exporter import (
+    CommentExportResult,
+    CommitExportResult,
+    CommitLogExportResult,
     ExportError,
+    ExportResult,
+    PrCommitCache,
     export_pr_check_logs,
+    export_pr_comments,
     export_pr_commit_files,
+    export_pr_commit_log,
 )
 from prinfo.gh import GhCli, GhCliError
+
+
+@dataclass(frozen=True)
+class _ModeRun:
+    name: str
+    result: object | None
+    error: ExportError | None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,71 +108,109 @@ def main(argv: Sequence[str] | None = None) -> int:
             gh_token=config.gh_token,
             gh_config_dir=str(config.gh_config_dir) if config.gh_config_dir else None,
         )
-        log_result = None
-        commit_result = None
-        log_error = None
-        commit_error = None
-
+        commits_cache = PrCommitCache()
+        modes: list[tuple[str, Callable[[], object]]] = []
         if not config.skip_check_logs:
-            try:
-                log_result = export_pr_check_logs(config, gh)
-            except ExportError as exc:
-                log_error = exc
-                if not config.export_commit_files:
-                    raise
-
+            modes.append(("check logs", lambda: export_pr_check_logs(config, gh)))
+        if config.export_comments:
+            modes.append(("comments", lambda: export_pr_comments(config, gh)))
         if config.export_commit_files:
-            try:
-                commit_result = export_pr_commit_files(config, gh)
-            except ExportError as exc:
-                commit_error = exc
+            modes.append(
+                ("commit files", lambda: export_pr_commit_files(config, gh, commits_cache))
+            )
+        if config.export_commit_log:
+            modes.append(
+                ("commit log", lambda: export_pr_commit_log(config, gh, commits_cache))
+            )
 
-        if log_result is None and commit_result is None:
-            if commit_error is not None:
-                raise commit_error
-            if log_error is not None:
-                raise log_error
+        runs: list[_ModeRun] = []
+        for name, run_mode in modes:
+            try:
+                result = run_mode()
+            except ExportError as exc:
+                runs.append(_ModeRun(name=name, result=None, error=exc))
+            else:
+                runs.append(_ModeRun(name=name, result=result, error=None))
+
+        if not any(run.result is not None for run in runs):
+            first_error = next((run.error for run in runs if run.error is not None), None)
+            if first_error is not None:
+                raise first_error
             raise ExportError("No PR data was exported.")
     except (ConfigurationError, ExportError, GhCliError, OSError) as exc:
         logging.getLogger("prinfo").error("%s", exc)
         return 1
 
-    if log_result is not None:
-        logging.getLogger("prinfo").info(
-            "Exported %s check log(s) for PR #%s in %s to %s",
-            log_result.exported_logs,
-            log_result.pr_number,
-            log_result.repo,
-            log_result.output_dir,
-        )
-        if log_result.manifest_only_logs:
-            logging.getLogger("prinfo").info(
-                "Recorded %s empty check log(s) in the manifest without writing files.",
-                log_result.manifest_only_logs,
-            )
-        if log_result.skipped_checks:
-            logging.getLogger("prinfo").warning("Skipped %s check(s).", log_result.skipped_checks)
-    elif log_error is not None:
-        logging.getLogger("prinfo").warning("Check log export was skipped: %s", log_error)
-
-    if commit_result is not None:
-        logging.getLogger("prinfo").info(
-            "Exported %s file snapshot(s) across %s commit(s) for PR #%s in %s to %s",
-            commit_result.exported_files,
-            commit_result.commit_count,
-            commit_result.pr_number,
-            commit_result.repo,
-            commit_result.output_dir,
-        )
-        if commit_result.skipped_files:
-            logging.getLogger("prinfo").warning(
-                "Skipped %s commit file(s).",
-                commit_result.skipped_files,
-            )
-    elif commit_error is not None:
-        logging.getLogger("prinfo").warning("Commit file export failed: %s", commit_error)
+    _log_mode_summaries(runs)
 
     return 0
+
+
+def _log_mode_summaries(runs: list[_ModeRun]) -> None:
+    logger = logging.getLogger("prinfo")
+    for run in runs:
+        result = run.result
+        if isinstance(result, ExportResult):
+            logger.info(
+                "Exported %s check log(s) for PR #%s in %s to %s",
+                result.exported_logs,
+                result.pr_number,
+                result.repo,
+                result.output_dir,
+            )
+            if result.manifest_only_logs:
+                logger.info(
+                    "Recorded %s empty check log(s) in the manifest without writing files.",
+                    result.manifest_only_logs,
+                )
+            if result.skipped_checks:
+                logger.warning("Skipped %s check(s).", result.skipped_checks)
+        elif isinstance(result, CommentExportResult):
+            logger.info(
+                "Exported %s issue comment(s), %s review comment(s) and %s review(s) "
+                "(%s review thread(s)) for PR #%s in %s to %s",
+                result.issue_comment_count,
+                result.review_comment_count,
+                result.review_count,
+                result.review_thread_count,
+                result.pr_number,
+                result.repo,
+                result.output_dir,
+            )
+            if result.skipped_sources:
+                logger.warning(
+                    "Skipped %s comment source(s).",
+                    result.skipped_sources,
+                )
+        elif isinstance(result, CommitExportResult):
+            logger.info(
+                "Exported %s file snapshot(s) across %s commit(s) for PR #%s in %s to %s",
+                result.exported_files,
+                result.commit_count,
+                result.pr_number,
+                result.repo,
+                result.output_dir,
+            )
+            if result.skipped_files:
+                logger.warning(
+                    "Skipped %s commit file(s).",
+                    result.skipped_files,
+                )
+        elif isinstance(result, CommitLogExportResult):
+            logger.info(
+                "Exported commit log for %s commit(s) for PR #%s in %s to %s",
+                result.commit_count,
+                result.pr_number,
+                result.repo,
+                result.output_dir,
+            )
+        elif run.error is not None:
+            if run.name == "check logs":
+                logger.warning("Check log export was skipped: %s", run.error)
+            elif run.name == "commit files":
+                logger.warning("Commit file export failed: %s", run.error)
+            else:
+                logger.warning("%s export failed: %s", run.name, run.error)
 
 
 def configure_logging(log_level: str) -> None:

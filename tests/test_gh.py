@@ -74,11 +74,15 @@ def test_run_text_returns_empty_string_when_subprocess_stdout_is_none() -> None:
 def test_list_pr_commits_flattens_paginated_response() -> None:
     payload = (
         b'[[{"sha":"abc1234def","html_url":"https://github.com/octo/repo/commit/abc1234def",'
-        b'"commit":{"message":"First commit\\n\\nBody","author":{"date":"2024-01-01T00:00:00Z"},'
-        b'"committer":{"date":"2024-01-01T00:00:01Z"}}}],'
+        b'"commit":{"message":"First commit\\n\\nBody",'
+        b'"author":{"name":"Alice Author","email":"alice@example.com","date":"2024-01-01T00:00:00Z"},'
+        b'"committer":{"name":"Alice Committer","email":"alice-c@example.com","date":"2024-01-01T00:00:01Z"}},'
+        b'"author":{"login":"alice-gh"},"committer":{"login":"alice-gh-c"}}],'
         b'[{"sha":"fedcba9876","html_url":"https://github.com/octo/repo/commit/fedcba9876",'
-        b'"commit":{"message":"Second commit","author":{"date":"2024-01-02T00:00:00Z"},'
-        b'"committer":{"date":"2024-01-02T00:00:01Z"}}}]]'
+        b'"commit":{"message":"Second commit",'
+        b'"author":{"name":"Bob Author","email":"bob@example.com","date":"2024-01-02T00:00:00Z"},'
+        b'"committer":{"name":"Bob Committer","email":"bob-c@example.com","date":"2024-01-02T00:00:01Z"}},'
+        b'"author":{"login":"bob-gh"},"committer":{"login":"bob-gh-c"}}]]'
     )
 
     def bytes_runner(*args, **kwargs):
@@ -92,6 +96,61 @@ def test_list_pr_commits_flattens_paginated_response() -> None:
     assert commits[0].short_sha == "abc1234"
     assert commits[0].message_headline == "First commit"
     assert commits[1].message_headline == "Second commit"
+    assert commits[0].author_name == "Alice Author"
+    assert commits[0].author_email == "alice@example.com"
+    assert commits[0].author_login == "alice-gh"
+    assert commits[0].committer_name == "Alice Committer"
+    assert commits[0].committer_email == "alice-c@example.com"
+    assert commits[0].committer_login == "alice-gh-c"
+    assert commits[1].author_name == "Bob Author"
+    assert commits[1].author_email == "bob@example.com"
+    assert commits[1].author_login == "bob-gh"
+    assert commits[1].committer_name == "Bob Committer"
+    assert commits[1].committer_email == "bob-c@example.com"
+    assert commits[1].committer_login == "bob-gh-c"
+
+
+def test_list_pr_commits_tolerates_missing_github_author() -> None:
+    payload = (
+        b'[{"sha":"abc1234def","html_url":"https://github.com/octo/repo/commit/abc1234def",'
+        b'"commit":{"message":"First commit",'
+        b'"author":{"name":"Alice Author","email":"alice@example.com","date":"2024-01-01T00:00:00Z"},'
+        b'"committer":{"name":"Alice Committer","email":"alice-c@example.com","date":"2024-01-01T00:00:01Z"}},'
+        b'"author":null,"committer":null}]'
+    )
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    commits = client.list_pr_commits("octo/repo", 1)
+
+    assert commits[0].author_login is None
+    assert commits[0].committer_login is None
+    assert commits[0].author_name == "Alice Author"
+    assert commits[0].author_email == "alice@example.com"
+
+
+def test_list_pr_commits_resolves_absent_author_fields_to_none() -> None:
+    payload = b'[{"sha":"abc1234def","commit":{"message":"First commit"}}]'
+
+    def bytes_runner(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, stdout=payload, stderr=b"")
+
+    client = GhCli(runner=bytes_runner)
+
+    commits = client.list_pr_commits("octo/repo", 1)
+
+    commit = commits[0]
+    assert commit.author_name is None
+    assert commit.author_email is None
+    assert commit.author_login is None
+    assert commit.authored_date is None
+    assert commit.committer_name is None
+    assert commit.committer_email is None
+    assert commit.committer_login is None
+    assert commit.committed_date is None
 
 
 def test_get_commit_details_collects_files_from_all_pages() -> None:

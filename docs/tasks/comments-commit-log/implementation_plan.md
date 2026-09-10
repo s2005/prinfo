@@ -2,7 +2,7 @@
 
 ## Overview
 
-Six phases. Phase 1 opens the config and CLI surface so later phases have somewhere to hang behaviour. Phase 2 adds the GitHub access - three REST comment calls and one GraphQL review-thread call. Phases 3 and 4 add the two exporters and can run in parallel once Phase 2 lands. Phase 5 wires all four modes into `main`, and Phase 6 updates the documentation and the agent skill.
+Seven phases. Phase 1 opens the config and CLI surface so later phases have somewhere to hang behaviour. Phase 2 adds the GitHub access - three REST comment calls and one GraphQL review-thread call. Phases 3 and 4 add the two exporters and can run in parallel once Phase 2 lands. Phase 5 wires all four modes into `main`, Phase 6 updates the documentation and the agent skill, and Phase 7 adds commit authorship to the commit records.
 
 ```mermaid
 flowchart TB
@@ -12,6 +12,7 @@ flowchart TB
     P3 --> P5["Phase 5: Orchestration"]
     P4 --> P5
     P5 --> P6["Phase 6: Documentation and skill"]
+    P6 --> P7["Phase 7: Commit authorship"]
 ```
 
 ## Affected Files
@@ -20,7 +21,7 @@ flowchart TB
 | ---- | ----------- | ----------- |
 | src/prinfo/cli.py | Update | Two new flags; `main` orchestrates four export modes with per-mode error isolation |
 | src/prinfo/config.py | Update | `export_comments` and `export_commit_log` on `AppConfig`; two env keys; relaxed `--skip-check-logs` guard |
-| src/prinfo/gh.py | Update | `IssueComment`, `ReviewComment`, `PullRequestReview`, `ReviewThread` dataclasses; three REST methods; one GraphQL method; `_run_graphql_paginated` |
+| src/prinfo/gh.py | Update | `IssueComment`, `ReviewComment`, `PullRequestReview`, `ReviewThread` dataclasses; three REST methods; one GraphQL method; `_run_graphql_paginated`; six `PrCommit` authorship fields |
 | src/prinfo/exporter.py | Update | `export_pr_comments` and `export_pr_commit_log`; shared commit fetch; Markdown renderer; result dataclasses |
 | `src/prinfo/__init__.py` | Update | Version bump to 0.4.0 |
 | pyproject.toml | Update | Version bump to 0.4.0, kept in step with `__init__.py` |
@@ -32,7 +33,7 @@ flowchart TB
 | README.md | Update | Flags, env keys, output files, relaxed skip rule |
 | skills/prinfo/SKILL.md | Update | New modes in the skill overview |
 | skills/prinfo/references/commands.md | Update | Command recipes for both flags |
-| skills/prinfo/references/outputs.md | Update | `comments.json`, `comments.md`, `commit-log.json` shapes |
+| skills/prinfo/references/outputs.md | Update | `comments.json`, `comments.md`, `commit-log.json` shapes; commit record authorship fields |
 | skills/prinfo/references/troubleshooting.md | Update | Failure modes for a skipped comment source, a failed review-thread call and an empty commit log |
 
 ## Phase 1: Config and CLI surface
@@ -176,6 +177,30 @@ Requirements: REQ-8
 - `markdownlint-cli2 "**/*.md" "#node_modules"` - clean (AC-11).
 - Every flag named in `README.md` appears in `uv run prinfo --help`.
 
+## Phase 7: Commit authorship
+
+Requirements: REQ-9
+
+### Implementation Work - Phase 7
+
+- Add the six authorship fields to `PrCommit` in `src/prinfo/gh.py`, in the grouped order `author_name`, `author_email`, `author_login`, `authored_date`, then `committer_name`, `committer_email`, `committer_login`, `committed_date`, keeping every field required with no default.
+- Populate them in `_parse_pr_commit` using the existing `_optional_str` helper.
+- Take the logins from the top-level `author` and `committer` objects, not from `commit.author` / `commit.committer`, and tolerate either being `null`.
+- Update `README.md` and `skills/prinfo/references/outputs.md` where the commit fields are listed.
+
+### Test Work - Phase 7
+
+- Extend the existing paginated commit parse test to assert all six fields.
+- Add a test for a null top-level author yielding `author_login` of `None`.
+- Add a test that an entry with no author or committer object resolves every field to `None`.
+- Update the six `PrCommit(...)` constructions in `tests/test_exporter.py`.
+- Assert the fields appear in `commit-log.json`, `commits-manifest.json` and `commits/<sha>/_commit.json`.
+
+### Verification - Phase 7
+
+- `uv run pytest`, `uv run ruff check src tests` and `markdownlint-cli2 "**/*.md" "#node_modules"`, each expected clean (AC-13).
+- Confirm no existing key was removed from any commit output.
+
 ## Traceability
 
 | REQ | Phase | Acceptance Criteria |
@@ -188,6 +213,7 @@ Requirements: REQ-8
 | REQ-6 | Phase 3, Phase 5 | AC-7, AC-8, AC-12 |
 | REQ-7 | Phase 2, Phase 3 | AC-9, AC-10, AC-12 |
 | REQ-8 | Phase 6 | AC-11 |
+| REQ-9 | Phase 7 | AC-13 |
 
 ## Dependency Graph
 
@@ -199,6 +225,7 @@ flowchart TB
     P3 --> P5["Phase 5: Orchestration"]
     P4 --> P5
     P5 --> P6["Phase 6: Documentation and skill"]
+    P6 --> P7["Phase 7: Commit authorship"]
 ```
 
 Phase 3 and Phase 4 have no dependency on each other and can be implemented in parallel once Phase 2 is merged.
@@ -213,3 +240,4 @@ Phase 3 and Phase 4 have no dependency on each other and can be implemented in p
 | Phase 4: Commit log export | 1 | 1 | Medium |
 | Phase 5: Orchestration | 2 | 1 | Small |
 | Phase 6: Documentation and skill | 5 | 0 | Medium |
+| Phase 7: Commit authorship | 3 | 2 | Small |

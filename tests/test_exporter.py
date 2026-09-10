@@ -386,7 +386,13 @@ def test_export_pr_commit_files_writes_commit_folders_and_manifests(tmp_path: Pa
         short_sha="abc1234",
         message_headline="Add feature",
         message="Add feature",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
         authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
         committed_date="2024-01-01T00:00:01Z",
         url="https://github.com/octo/repo/commit/abc1234def5678",
     )
@@ -449,6 +455,8 @@ def test_export_pr_commit_files_writes_commit_folders_and_manifests(tmp_path: Pa
         (config.output_dir / "commits" / commit.sha / "_commit.json").read_text(encoding="utf-8")
     )
     assert commit_manifest["commit"]["sha"] == commit.sha
+    assert commit_manifest["commit"]["author_name"] == "Alice Author"
+    assert commit_manifest["commit"]["author_login"] == "alice-gh"
     assert commit_manifest["exported"][0]["path"] == f"commits/{commit.sha}/src/app.py"
     assert commit_manifest["skipped"][0]["reason_code"] == "removed"
 
@@ -456,6 +464,8 @@ def test_export_pr_commit_files_writes_commit_folders_and_manifests(tmp_path: Pa
     assert root_manifest["commit_count"] == 1
     assert root_manifest["exported_files"] == 1
     assert root_manifest["commits"][0]["folder"] == f"commits/{commit.sha}"
+    assert root_manifest["commits"][0]["commit"]["author_name"] == "Alice Author"
+    assert root_manifest["commits"][0]["commit"]["author_login"] == "alice-gh"
 
 
 def test_export_pr_commit_files_continues_when_a_file_download_fails(tmp_path: Path) -> None:
@@ -464,7 +474,13 @@ def test_export_pr_commit_files_continues_when_a_file_download_fails(tmp_path: P
         short_sha="abc1234",
         message_headline="Add feature",
         message="Add feature",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
         authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
         committed_date="2024-01-01T00:00:01Z",
         url="https://github.com/octo/repo/commit/abc1234def5678",
     )
@@ -552,7 +568,13 @@ def test_export_pr_commit_log_writes_commit_metadata_only(tmp_path: Path) -> Non
         short_sha="abc1234",
         message_headline="Add feature",
         message="Add feature\n\nLonger body.",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
         authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
         committed_date="2024-01-01T00:00:01Z",
         url="https://github.com/octo/repo/commit/abc1234def5678",
     )
@@ -561,7 +583,13 @@ def test_export_pr_commit_log_writes_commit_metadata_only(tmp_path: Path) -> Non
         short_sha="def5678",
         message_headline="Fix bug",
         message="Fix bug",
+        author_name="Bob Author",
+        author_email="bob@example.com",
+        author_login="bob-gh",
         authored_date="2024-01-02T00:00:00Z",
+        committer_name="Bob Committer",
+        committer_email="bob-c@example.com",
+        committer_login="bob-gh-c",
         committed_date="2024-01-02T00:00:01Z",
         url="https://github.com/octo/repo/commit/def5678abc1234",
     )
@@ -585,7 +613,13 @@ def test_export_pr_commit_log_writes_commit_metadata_only(tmp_path: Path) -> Non
     assert first["short_sha"] == commit_one.short_sha
     assert first["message_headline"] == commit_one.message_headline
     assert first["message"] == commit_one.message
+    assert first["author_name"] == commit_one.author_name
+    assert first["author_email"] == commit_one.author_email
+    assert first["author_login"] == commit_one.author_login
     assert first["authored_date"] == commit_one.authored_date
+    assert first["committer_name"] == commit_one.committer_name
+    assert first["committer_email"] == commit_one.committer_email
+    assert first["committer_login"] == commit_one.committer_login
     assert first["committed_date"] == commit_one.committed_date
     assert first["url"] == commit_one.url
 
@@ -596,7 +630,13 @@ def test_export_pr_commit_log_and_files_share_one_commit_fetch(tmp_path: Path) -
         short_sha="abc1234",
         message_headline="Add feature",
         message="Add feature",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
         authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
         committed_date="2024-01-01T00:00:01Z",
         url="https://github.com/octo/repo/commit/abc1234def5678",
     )
@@ -660,7 +700,13 @@ def test_export_pr_commit_files_without_cache_still_fetches_commits(tmp_path: Pa
         short_sha="abc1234",
         message_headline="Add feature",
         message="Add feature",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
         authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
         committed_date="2024-01-01T00:00:01Z",
         url="https://github.com/octo/repo/commit/abc1234def5678",
     )
@@ -704,6 +750,37 @@ def test_export_pr_commit_files_without_cache_still_fetches_commits(tmp_path: Pa
     export_pr_commit_files(config, gh)
 
     assert gh.list_pr_commits_calls == 1
+
+
+def test_export_pr_commit_log_records_commit_authorship(tmp_path: Path) -> None:
+    commit = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Add feature",
+        message="Add feature",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
+        authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    config = _commit_log_config(tmp_path=tmp_path)
+    gh = FakeGhCli(commits=[commit])
+
+    result = export_pr_commit_log(config, gh)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    first = manifest["commits"][0]
+    assert first["author_name"] == "Alice Author"
+    assert first["author_email"] == "alice@example.com"
+    assert first["author_login"] == "alice-gh"
+    assert first["committer_name"] == "Alice Committer"
+    assert first["committer_email"] == "alice-c@example.com"
+    assert first["committer_login"] == "alice-gh-c"
 
 
 def _comments_config(*, tmp_path: Path, pr_number: int = 42) -> AppConfig:

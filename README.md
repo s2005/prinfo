@@ -146,8 +146,13 @@ remaining sources still export.
 ordered by timestamp across all sources with untimestamped entries last.
 
 `commit-log.json` carries commit metadata only (`sha`, `short_sha`,
-`message_headline`, `message`, `authored_date`, `committed_date`, `url`) for
-every commit on the PR, with no file downloads.
+`message_headline`, `message`, `author_name`, `author_email`, `author_login`,
+`authored_date`, `committer_name`, `committer_email`, `committer_login`,
+`committed_date`, `url`) for every commit on the PR, with no file downloads.
+Each commit record carries both the git author and the git committer, which
+differ after a rebase or a squash merge; `author_login` and `committer_login`
+are the corresponding GitHub accounts and are `null` when the commit email
+matches no GitHub user.
 
 ## Skill
 

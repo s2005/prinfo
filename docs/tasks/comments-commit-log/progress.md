@@ -105,6 +105,22 @@ Requirements: REQ-8
 - [x] Update `skills/prinfo/references/troubleshooting.md` with the new failure modes.
 - [x] Run `markdownlint-cli2 "**/*.md" "#node_modules"`.
 
+## Phase 7: Commit authorship
+
+Requirements: REQ-9
+
+- [x] Add the six authorship fields to `PrCommit` in grouped order, every field required.
+- [x] Populate them in `_parse_pr_commit` through `_optional_str`.
+- [x] Take `author_login` and `committer_login` from the top-level objects and tolerate a null.
+- [x] Extend the paginated commit parse test to assert all six fields.
+- [x] Add a test for a null top-level author yielding `author_login` of `None`.
+- [x] Add a test that an absent author object resolves every field to `None`.
+- [x] Update the six `PrCommit(...)` constructions in `tests/test_exporter.py`.
+- [x] Assert the fields reach `commit-log.json`, `commits-manifest.json` and `_commit.json`.
+- [x] Update the commit field list in `README.md`.
+- [x] Update the commit field list in `skills/prinfo/references/outputs.md`.
+- [x] Run `uv run pytest`, `uv run ruff check .` and `markdownlint-cli2 "**/*.md" "#node_modules"`.
+
 ## Follow-Ups Found
 
 Found while running the Phase 6 documentation drift check, and deliberately left

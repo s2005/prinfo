@@ -41,7 +41,7 @@ An entry with no timestamp sorts last rather than raising. The file is written w
 
 ### REQ-4: `--export-commit-log` writes `commit-log.json` from a shared fetch
 
-`--export-commit-log` writes `commit-log.json` with `repo`, `pr_number`, `commit_count` and a `commits` array of the full `PrCommit` records, and downloads no file blobs. When `--export-commit-files` runs in the same invocation, the commit list is fetched once and both outputs are produced from it, so `repos/<owner>/<repo>/pulls/<n>/commits` is requested exactly once per run. `commits-manifest.json` keeps its current shape and content unchanged.
+`--export-commit-log` writes `commit-log.json` with `repo`, `pr_number`, `commit_count` and a `commits` array of the full `PrCommit` records, and downloads no file blobs. When `--export-commit-files` runs in the same invocation, the commit list is fetched once and both outputs are produced from it, so `repos/<owner>/<repo>/pulls/<n>/commits` is requested exactly once per run. `commits-manifest.json` keeps its current structure - the same top-level keys and the same per-commit record layout - and its commit records gain the authorship fields REQ-9 adds, because every commit output serializes the same `PrCommit`.
 
 ### REQ-5: Config surface for both flags, with the export guard relaxed
 
@@ -59,13 +59,17 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 
 `README.md` gains both flags in the quick-start examples, both env keys in the supported-keys list, and a description of `comments.json`, `comments.md` and `commit-log.json` under `## Output`. The relaxed `--skip-check-logs` rule is restated where the current commit-only sentence sits. `skills/prinfo/SKILL.md`, `skills/prinfo/references/commands.md`, `skills/prinfo/references/outputs.md` and `skills/prinfo/references/troubleshooting.md` are updated so the agent skill describes the new modes and their output files; `troubleshooting.md` gains the failure modes the two new modes introduce.
 
+### REQ-9: Commit records carry authorship
+
+`PrCommit` gains `author_name`, `author_email`, `author_login`, `committer_name`, `committer_email` and `committer_login`. Name and email come from `commit.author` and `commit.committer`; the logins come from the top-level `author` and `committer` objects, which are `null` when the commit email matches no GitHub account, so both login fields resolve to `None` without raising. Every field resolves to `None` rather than an empty string when absent. The fields reach `commits-manifest.json`, `commits/<sha>/_commit.json` and `commit-log.json` because all three serialize the same record, and no existing key is removed or renamed. No additional API request is made; the data is already in the payload the commits endpoint returns.
+
 ## Non-Requirements
 
 - No comment filtering, bot exclusion or `--comments-exclude-bots` flag - records are exported verbatim, per Q6 in `open_questions.md`.
 - No posting, editing, resolving or replying to comments; the tool stays read-only.
 - No export of PR description, labels, assignees, requested reviewers or timeline events.
 - No commit diffs or patches in `commit-log.json`; it carries metadata only, and `--export-commit-files` remains the way to get file content.
-- No change to the shape or content of `manifest.json`, `commits-manifest.json` or `commits/<sha>/_commit.json`.
+- `manifest.json`, the check-log export, is unchanged; the commit outputs change only by gaining the authorship fields of REQ-9, with no key removed or renamed.
 - No new output format beyond JSON and Markdown - no HTML, no CSV.
 
 ## Acceptance Criteria
@@ -82,6 +86,7 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 - **AC-10** - A GraphQL failure records a `review_threads` entry in `skipped_sources` while `comments.json` still contains all three REST sources (REQ-7)
 - **AC-11** - `README.md` documents both flags, both env keys and all three new output files, the skill reference files - troubleshooting included - document the new modes, and `markdownlint-cli2` reports no findings on the changed Markdown (REQ-8)
 - **AC-12** - `uv run ruff check .` and `uv run pytest` both pass on the finished branch (REQ-1, REQ-2, REQ-3, REQ-4, REQ-5, REQ-6, REQ-7)
+- **AC-13** - a parsed commit carries all six authorship fields, a commit whose top-level author is null yields `author_login` of `None` without raising, and all three commit outputs show the fields (REQ-9)
 
 ## Deliverables
 

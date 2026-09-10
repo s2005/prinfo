@@ -56,7 +56,13 @@ class PrCommit:
     short_sha: str
     message_headline: str
     message: str
+    author_name: str | None
+    author_email: str | None
+    author_login: str | None
     authored_date: str | None
+    committer_name: str | None
+    committer_email: str | None
+    committer_login: str | None
     committed_date: str | None
     url: str | None
 
@@ -476,12 +482,25 @@ def _parse_pr_commit(raw_commit: dict[str, object]) -> PrCommit:
     if not isinstance(committer_data, dict):
         committer_data = {}
 
+    top_level_author = raw_commit.get("author")
+    if not isinstance(top_level_author, dict):
+        top_level_author = {}
+    top_level_committer = raw_commit.get("committer")
+    if not isinstance(top_level_committer, dict):
+        top_level_committer = {}
+
     return PrCommit(
         sha=sha,
         short_sha=sha[:7],
         message_headline=message_headline,
         message=message,
+        author_name=_optional_str(author_data.get("name")),
+        author_email=_optional_str(author_data.get("email")),
+        author_login=_optional_str(top_level_author.get("login")),
         authored_date=author_data.get("date"),
+        committer_name=_optional_str(committer_data.get("name")),
+        committer_email=_optional_str(committer_data.get("email")),
+        committer_login=_optional_str(top_level_committer.get("login")),
         committed_date=committer_data.get("date"),
         url=raw_commit.get("html_url"),
     )

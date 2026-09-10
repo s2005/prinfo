@@ -129,8 +129,15 @@ thread matched it. Bodies are reproduced verbatim.
 - `commit_count`
 - `commits`
 
-Each entry in `commits` carries seven fields: `sha`, `short_sha`,
-`message_headline`, `message`, `authored_date`, `committed_date`, and `url`.
+Each entry in `commits` carries thirteen fields: `sha`, `short_sha`,
+`message_headline`, `message`, `author_name`, `author_email`,
+`author_login`, `authored_date`, `committer_name`, `committer_email`,
+`committer_login`, `committed_date`, and `url`.
+
+Each commit record carries both the git author and the git committer, which
+differ after a rebase or a squash merge. `author_login` and `committer_login`
+are the corresponding GitHub accounts, resolved from the commit email, and
+are `null` when that email matches no GitHub user.
 
 ## How to explain a skipped comment source
 

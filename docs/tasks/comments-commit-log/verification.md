@@ -114,6 +114,17 @@ uv run prinfo --help
 
 Expected: the Markdown linter reports no findings across `README.md` and the four skill files, and every flag documented in `README.md` appears in the help output.
 
+#### Phase 7: Commit authorship
+
+Covers REQ-9.
+
+```bash
+uv run pytest tests/test_gh.py tests/test_exporter.py
+uv run ruff check src tests
+```
+
+Expected: the parse tests show all six fields populated, a null top-level author yields `author_login` of `None` without raising, and the three commit outputs each carry the fields.
+
 ### Linter
 
 ```bash
@@ -164,3 +175,4 @@ The feature can be accepted when all items are true:
 - [x] AC-10 - a GraphQL failure is recorded in `skipped_sources` while all three REST sources still export - verified by: Phase 3 verification
 - [x] AC-11 - README.md documents both flags, both env keys and all three new output files, the four skill reference files describe the new modes and their failure cases, and the Markdown linter is clean - verified by: Phase 6 verification
 - [x] AC-12 - `uv run ruff check .` and `uv run pytest` both pass - verified by: Linter and Regression Check sections
+- [x] AC-13 - a parsed commit carries all six authorship fields, a null top-level author yields `author_login` of `None` without raising, and the fields appear in `commits-manifest.json`, `commits/<sha>/_commit.json` and `commit-log.json` - verified by: Phase 7 verification

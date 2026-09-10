@@ -2,15 +2,16 @@
 
 ## Overview
 
-Five phases. Phase 1 opens the config and CLI surface so later phases have somewhere to hang behaviour. Phase 2 adds the GitHub access - three REST comment calls and one GraphQL review-thread call. Phases 3 and 4 add the two exporters and can run in parallel once Phase 2 lands. Phase 5 wires all four modes into `main` and updates the documentation.
+Six phases. Phase 1 opens the config and CLI surface so later phases have somewhere to hang behaviour. Phase 2 adds the GitHub access - three REST comment calls and one GraphQL review-thread call. Phases 3 and 4 add the two exporters and can run in parallel once Phase 2 lands. Phase 5 wires all four modes into `main`, and Phase 6 updates the documentation and the agent skill.
 
 ```mermaid
 flowchart TB
     P1["Phase 1: Config and CLI surface"] --> P2["Phase 2: gh client comment access"]
     P2 --> P3["Phase 3: Comment export"]
     P2 --> P4["Phase 4: Commit log export"]
-    P3 --> P5["Phase 5: Orchestration and docs"]
+    P3 --> P5["Phase 5: Orchestration"]
     P4 --> P5
+    P5 --> P6["Phase 6: Documentation and skill"]
 ```
 
 ## Affected Files
@@ -30,6 +31,7 @@ flowchart TB
 | skills/prinfo/SKILL.md | Update | New modes in the skill overview |
 | skills/prinfo/references/commands.md | Update | Command recipes for both flags |
 | skills/prinfo/references/outputs.md | Update | `comments.json`, `comments.md`, `commit-log.json` shapes |
+| skills/prinfo/references/troubleshooting.md | Update | Failure modes for a skipped comment source, a failed review-thread call and an empty commit log |
 
 ## Phase 1: Config and CLI surface
 
@@ -125,9 +127,9 @@ Requirements: REQ-4
 
 - `uv run pytest tests/test_exporter.py` - all pass, including the pre-existing commit-export tests.
 
-## Phase 5: Orchestration and docs
+## Phase 5: Orchestration
 
-Requirements: REQ-6, REQ-8
+Requirements: REQ-6
 
 ### Implementation Work - Phase 5
 
@@ -135,8 +137,6 @@ Requirements: REQ-6, REQ-8
 - Run each requested mode in its own `try`, catching `ExportError` and recording it. Raise only when no mode produced a result, preferring the first recorded error for the message.
 - Log a per-mode summary as today: counts for check logs, commit files, comments (per source plus skipped sources) and commit log.
 - Bump `__version__` to `0.4.0` in `src/prinfo/__init__.py`.
-- Update `README.md`: quick-start examples for both flags, both env keys in the supported list, the three new output files under `## Output`, and the relaxed `--skip-check-logs` sentence.
-- Update `skills/prinfo/SKILL.md`, `skills/prinfo/references/commands.md` and `skills/prinfo/references/outputs.md` to describe the new modes and their outputs.
 
 ### Test Work - Phase 5
 
@@ -148,8 +148,29 @@ Requirements: REQ-6, REQ-8
 
 - `uv run pytest` - full suite passes.
 - `uv run ruff check .` - clean.
-- `markdownlint-cli2 "**/*.md" "#node_modules"` - clean (AC-11).
 - `uv run prinfo --help` on Windows shows both flags, matching the CI help smoke test.
+
+## Phase 6: Documentation and skill
+
+Requirements: REQ-8
+
+### Implementation Work - Phase 6
+
+- Update `README.md` with quick-start examples for both flags, both env keys, the three new output files under `## Output`, the relaxed `--skip-check-logs` sentence and the per-mode failure-isolation sentence.
+- Update `skills/prinfo/SKILL.md` frontmatter description, the workflow steps, the critical constraints and the working rules.
+- Update `skills/prinfo/references/commands.md` with recipes for both flags and the new env keys.
+- Update `skills/prinfo/references/outputs.md` with the `comments.json`, `comments.md` and `commit-log.json` shapes.
+- Update `skills/prinfo/references/troubleshooting.md` with the failure modes the two new export modes introduce.
+
+### Test Work - Phase 6
+
+- The documentation carries no automated test beyond the Markdown linter.
+- Every documented flag and env key must be checked against `uv run prinfo --help` and `src/prinfo/config.py` so the docs cannot drift from the parser.
+
+### Verification - Phase 6
+
+- `markdownlint-cli2 "**/*.md" "#node_modules"` - clean (AC-11).
+- Every flag named in `README.md` appears in `uv run prinfo --help`.
 
 ## Traceability
 
@@ -162,7 +183,7 @@ Requirements: REQ-6, REQ-8
 | REQ-5 | Phase 1 | AC-5, AC-6, AC-12 |
 | REQ-6 | Phase 3, Phase 5 | AC-7, AC-8, AC-12 |
 | REQ-7 | Phase 2, Phase 3 | AC-9, AC-10, AC-12 |
-| REQ-8 | Phase 5 | AC-11 |
+| REQ-8 | Phase 6 | AC-11 |
 
 ## Dependency Graph
 
@@ -171,8 +192,9 @@ flowchart TB
     P1["Phase 1: Config and CLI surface"] --> P2["Phase 2: gh client comment access"]
     P2 --> P3["Phase 3: Comment export"]
     P2 --> P4["Phase 4: Commit log export"]
-    P3 --> P5["Phase 5: Orchestration and docs"]
+    P3 --> P5["Phase 5: Orchestration"]
     P4 --> P5
+    P5 --> P6["Phase 6: Documentation and skill"]
 ```
 
 Phase 3 and Phase 4 have no dependency on each other and can be implemented in parallel once Phase 2 is merged.
@@ -185,4 +207,5 @@ Phase 3 and Phase 4 have no dependency on each other and can be implemented in p
 | Phase 2: gh client comment access | 1 | 1 | Large |
 | Phase 3: Comment export | 1 | 1 | Large |
 | Phase 4: Commit log export | 1 | 1 | Medium |
-| Phase 5: Orchestration and docs | 3 | 1 | Medium |
+| Phase 5: Orchestration | 2 | 1 | Small |
+| Phase 6: Documentation and skill | 5 | 0 | Medium |

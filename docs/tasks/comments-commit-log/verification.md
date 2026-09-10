@@ -92,9 +92,9 @@ uv run pytest tests/test_exporter.py -k commit
 
 Expected: the commit-log-only test records zero `download_commit_file` calls; the combined test records exactly one `list_pr_commits` call and finds both `commit-log.json` and `commits-manifest.json`; the pre-existing commit-file tests pass unchanged.
 
-#### Phase 5: Orchestration and docs
+#### Phase 5: Orchestration
 
-Covers REQ-6 and REQ-8.
+Covers REQ-6.
 
 ```bash
 uv run pytest tests/test_cli.py
@@ -102,6 +102,17 @@ uv run prinfo --version
 ```
 
 Expected: partial-failure test returns 0, total-failure test returns 1, and `--version` reports `prinfo 0.4.0`.
+
+#### Phase 6: Documentation and skill
+
+Covers REQ-8.
+
+```bash
+markdownlint-cli2 "**/*.md" "#node_modules"
+uv run prinfo --help
+```
+
+Expected: the Markdown linter reports no findings across `README.md` and the four skill files, and every flag documented in `README.md` appears in the help output.
 
 ### Linter
 
@@ -151,5 +162,5 @@ The feature can be accepted when all items are true:
 - [x] AC-8 - `main` returns 0 on partial failure and 1 when every requested mode fails - verified by: Phase 5 verification
 - [x] AC-9 - `list_pr_review_threads` parses paginated GraphQL into `ReviewThread` records and thread state lands on matching review comments, unmatched staying `None` - verified by: Phase 2 and Phase 3 verification
 - [x] AC-10 - a GraphQL failure is recorded in `skipped_sources` while all three REST sources still export - verified by: Phase 3 verification
-- [x] AC-11 - `README.md` documents both flags, both env keys and all three new output files, and the Markdown linter is clean - verified by: Markdown Linter section
+- [x] AC-11 - README.md documents both flags, both env keys and all three new output files, the four skill reference files describe the new modes and their failure cases, and the Markdown linter is clean - verified by: Phase 6 verification
 - [x] AC-12 - `uv run ruff check .` and `uv run pytest` both pass - verified by: Linter and Regression Check sections

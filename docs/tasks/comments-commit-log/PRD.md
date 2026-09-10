@@ -57,7 +57,7 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 
 ### REQ-8: Documentation records both new flags
 
-`README.md` gains both flags in the quick-start examples, both env keys in the supported-keys list, and a description of `comments.json`, `comments.md` and `commit-log.json` under `## Output`. The relaxed `--skip-check-logs` rule is restated where the current commit-only sentence sits. `skills/prinfo/SKILL.md`, `skills/prinfo/references/commands.md` and `skills/prinfo/references/outputs.md` are updated so the agent skill describes the new modes and their output files.
+`README.md` gains both flags in the quick-start examples, both env keys in the supported-keys list, and a description of `comments.json`, `comments.md` and `commit-log.json` under `## Output`. The relaxed `--skip-check-logs` rule is restated where the current commit-only sentence sits. `skills/prinfo/SKILL.md`, `skills/prinfo/references/commands.md`, `skills/prinfo/references/outputs.md` and `skills/prinfo/references/troubleshooting.md` are updated so the agent skill describes the new modes and their output files; `troubleshooting.md` gains the failure modes the two new modes introduce.
 
 ## Non-Requirements
 
@@ -80,7 +80,7 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 - **AC-8** - `main` returns 0 when one of several requested modes fails and another succeeds, and returns 1 when every requested mode fails (REQ-6)
 - **AC-9** - `list_pr_review_threads` parses a paginated GraphQL payload into `ReviewThread` records, and the exporter sets `is_resolved` and `thread_id` on each matching review comment while leaving unmatched comments at `None` (REQ-7)
 - **AC-10** - A GraphQL failure records a `review_threads` entry in `skipped_sources` while `comments.json` still contains all three REST sources (REQ-7)
-- **AC-11** - `README.md` documents both flags, both env keys and all three new output files, and `markdownlint-cli2` reports no findings on the changed Markdown (REQ-8)
+- **AC-11** - `README.md` documents both flags, both env keys and all three new output files, the skill reference files - troubleshooting included - document the new modes, and `markdownlint-cli2` reports no findings on the changed Markdown (REQ-8)
 - **AC-12** - `uv run ruff check .` and `uv run pytest` both pass on the finished branch (REQ-1, REQ-2, REQ-3, REQ-4, REQ-5, REQ-6, REQ-7)
 
 ## Deliverables
@@ -100,3 +100,4 @@ A `GhCliError` from one comment endpoint does not abort the other two: the failu
 | skills/prinfo/SKILL.md | Update |
 | skills/prinfo/references/commands.md | Update |
 | skills/prinfo/references/outputs.md | Update |
+| skills/prinfo/references/troubleshooting.md | Update |

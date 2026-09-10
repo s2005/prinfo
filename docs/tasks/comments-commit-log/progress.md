@@ -81,22 +81,43 @@ Requirements: REQ-4
 - [x] Add a counting-fake test asserting exactly one `list_pr_commits` call when both commit modes run.
 - [x] Run `uv run pytest tests/test_exporter.py`.
 
-## Phase 5: Orchestration and docs
+## Phase 5: Orchestration
 
-Requirements: REQ-6, REQ-8
+Requirements: REQ-6
 
 - [x] Replace the parallel result and error locals in `main` with a per-mode record list.
 - [x] Run each requested mode in its own `try` with per-mode error recording.
 - [x] Raise only when no mode produced a result.
 - [x] Log a per-mode summary covering all four modes.
 - [x] Bump `__version__` to `0.4.0`.
+- [x] Add CLI tests for partial-failure exit 0 and total-failure exit 1.
+- [x] Update the `--version` test to `0.4.0`.
+- [x] Run `uv run pytest` and `uv run ruff check .`.
+
+## Phase 6: Documentation and skill
+
+Requirements: REQ-8
+
 - [x] Update `README.md` with both flags, both env keys, the three new output files and the relaxed skip rule.
 - [x] Update `skills/prinfo/SKILL.md`.
 - [x] Update `skills/prinfo/references/commands.md`.
 - [x] Update `skills/prinfo/references/outputs.md`.
-- [x] Add CLI tests for partial-failure exit 0 and total-failure exit 1.
-- [x] Update the `--version` test to `0.4.0`.
-- [x] Run `uv run pytest`, `uv run ruff check .` and `markdownlint-cli2 "**/*.md" "#node_modules"`.
+- [x] Update `skills/prinfo/references/troubleshooting.md` with the new failure modes.
+- [x] Run `markdownlint-cli2 "**/*.md" "#node_modules"`.
+
+## Follow-Ups Found
+
+Found while running the Phase 6 documentation drift check, and deliberately left
+alone because no requirement in this task covers it:
+
+- `PRINFO_ENV_FILE` is read by `_resolve_env_file` in `src/prinfo/config.py` but
+  is absent from the supported-env-keys list in `README.md` and in
+  `skills/prinfo/references/commands.md`. The gap predates this task and this
+  task does not make it worse, so it needs its own ticket rather than riding
+  along with this one.
+- `skills/prinfo/references/commands.md` lists supported env keys without
+  `PRINFO_EXPORT_COMMIT_FILES` and `PRINFO_SKIP_CHECK_LOGS`. Same reasoning: the
+  omission predates this task.
 
 ## Review Feedback
 

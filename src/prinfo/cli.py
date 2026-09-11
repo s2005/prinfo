@@ -8,6 +8,7 @@ from typing import Callable, Sequence
 from prinfo import __version__
 from prinfo.config import ConfigurationError, resolve_config
 from prinfo.exporter import (
+    ACTIONABLE_COMMIT_SKIP_REASONS,
     CommentExportResult,
     CommitExportResult,
     CommitLogExportResult,
@@ -192,10 +193,23 @@ def _log_mode_summaries(runs: list[_ModeRun]) -> None:
                 result.output_dir,
             )
             if result.skipped_files:
-                logger.warning(
-                    "Skipped %s commit file(s).",
-                    result.skipped_files,
+                actionable = sum(
+                    count
+                    for reason_code, count in result.skipped_file_reasons.items()
+                    if reason_code in ACTIONABLE_COMMIT_SKIP_REASONS
                 )
+                benign = result.skipped_files - actionable
+                if actionable:
+                    logger.warning(
+                        "%s commit file(s) could not be downloaded.",
+                        actionable,
+                    )
+                if benign:
+                    logger.info(
+                        "%s commit file(s) cannot be exported (removed in the commit, "
+                        "or absent from the commit payload).",
+                        benign,
+                    )
         elif isinstance(result, CommitLogExportResult):
             logger.info(
                 "Exported commit log for %s commit(s) for PR #%s in %s to %s",

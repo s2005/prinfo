@@ -4,7 +4,9 @@ import dataclasses
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+from collections import Counter
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
 
 from prinfo.config import AppConfig
@@ -50,6 +52,7 @@ class CommitExportResult:
     commit_count: int
     exported_files: int
     skipped_files: int
+    skipped_file_reasons: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -332,6 +335,7 @@ def export_pr_commit_files(
     commit_records: list[dict[str, object]] = []
     exported_files = 0
     skipped_files = 0
+    skipped_file_reasons: Counter[str] = Counter()
 
     for commit in commits:
         LOGGER.info("Exporting files for commit %s (%s)", commit.short_sha, commit.message_headline)
@@ -343,9 +347,11 @@ def export_pr_commit_files(
             gh=gh,
             repo_ref=repo_ref,
         )
-        exported_files += commit_result["exported_files"]
-        skipped_files += commit_result["skipped_files"]
-        commit_records.append(commit_result["record"])
+        exported_files += commit_result.exported_files
+        skipped_files += commit_result.skipped_files
+        commit_records.append(commit_result.record)
+        for entry in commit_result.skipped:
+            skipped_file_reasons[str(entry["reason_code"])] += 1
 
     manifest_path = config.output_dir / "commits-manifest.json"
     manifest = {
@@ -366,6 +372,7 @@ def export_pr_commit_files(
         commit_count=len(commits),
         exported_files=exported_files,
         skipped_files=skipped_files,
+        skipped_file_reasons=dict(skipped_file_reasons),
     )
 
 
@@ -416,6 +423,20 @@ def slugify(value: str) -> str:
     return sanitized.lower() or "check"
 
 
+# Reason codes a caller should act on. "removed" and "missing_path" describe files
+# that cannot exist at the requested revision and need no action; "download_failed"
+# means gh errored while fetching a file that should have been retrievable.
+ACTIONABLE_COMMIT_SKIP_REASONS = frozenset({"download_failed"})
+
+
+@dataclass(frozen=True)
+class _CommitFolderResult:
+    exported_files: int
+    skipped_files: int
+    skipped: list[dict[str, object]]
+    record: dict[str, object]
+
+
 def _export_commit_folder(
     *,
     output_dir: Path,
@@ -423,7 +444,7 @@ def _export_commit_folder(
     details: CommitDetails,
     gh: GhCli,
     repo_ref,
-) -> dict[str, object]:
+) -> _CommitFolderResult:
     commit_dir = commits_dir / details.commit.sha
     commit_dir.mkdir(parents=True, exist_ok=True)
 
@@ -494,17 +515,19 @@ def _export_commit_folder(
     }
     commit_manifest_path.write_text(json.dumps(commit_manifest, indent=2), encoding="utf-8")
 
-    return {
-        "exported_files": len(exported),
-        "skipped_files": len(skipped),
-        "record": {
+    return _CommitFolderResult(
+        exported_files=len(exported),
+        skipped_files=len(skipped),
+        skipped=skipped,
+        record={
             "commit": asdict(details.commit),
             "folder": _relative_manifest_path(output_dir=output_dir, path=commit_dir),
             "manifest_path": _relative_manifest_path(output_dir=output_dir, path=commit_manifest_path),
             "exported_files": len(exported),
             "skipped_files": len(skipped),
+            "skipped": skipped,
         },
-    }
+    )
 
 
 def _sanitize_repo_relative_path(repo_path: str) -> Path:

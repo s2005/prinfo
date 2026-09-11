@@ -1153,3 +1153,153 @@ def test_export_pr_comments_transcript_has_no_absolute_path(tmp_path: Path) -> N
     assert str(tmp_path) not in text
     assert not re.search(r"[A-Za-z]:[\\/]", text)
     assert text.isascii()
+
+
+def test_commit_root_manifest_records_why_each_file_was_skipped(tmp_path: Path) -> None:
+    commit = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Delete a file and add another",
+        message="Delete a file and add another",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
+        authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    config = AppConfig(
+        pr_number=42,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=True,
+        export_comments=False,
+        export_commit_log=False,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        commits=[commit],
+        commit_details={
+            commit.sha: CommitDetails(
+                commit=commit,
+                files=[
+                    CommitFile(
+                        path="README.md",
+                        status="removed",
+                        additions=0,
+                        deletions=5,
+                        changes=5,
+                        previous_path=None,
+                    ),
+                    CommitFile(
+                        path="src/missing.py",
+                        status="modified",
+                        additions=1,
+                        deletions=0,
+                        changes=1,
+                        previous_path=None,
+                    ),
+                ],
+            )
+        },
+        commit_file_outputs={},
+        failing_commit_files={(commit.sha, "src/missing.py"): "download boom"},
+    )
+
+    result = export_pr_commit_files(config, gh)
+
+    assert result.skipped_files == 2
+
+    root_manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    skipped = root_manifest["commits"][0]["skipped"]
+
+    # The count the CLI warns about must be explainable from this manifest alone.
+    assert [entry["reason_code"] for entry in skipped] == ["removed", "download_failed"]
+    assert [entry["path"] for entry in skipped] == ["README.md", "src/missing.py"]
+
+
+def test_commit_export_result_tallies_skipped_files_by_reason_code(tmp_path: Path) -> None:
+    commit = PrCommit(
+        sha="abc1234def5678",
+        short_sha="abc1234",
+        message_headline="Delete a file and add another",
+        message="Delete a file and add another",
+        author_name="Alice Author",
+        author_email="alice@example.com",
+        author_login="alice-gh",
+        authored_date="2024-01-01T00:00:00Z",
+        committer_name="Alice Committer",
+        committer_email="alice-c@example.com",
+        committer_login="alice-gh-c",
+        committed_date="2024-01-01T00:00:01Z",
+        url="https://github.com/octo/repo/commit/abc1234def5678",
+    )
+    config = AppConfig(
+        pr_number=42,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=True,
+        export_comments=False,
+        export_commit_log=False,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        commits=[commit],
+        commit_details={
+            commit.sha: CommitDetails(
+                commit=commit,
+                files=[
+                    CommitFile(
+                        path="README.md",
+                        status="removed",
+                        additions=0,
+                        deletions=5,
+                        changes=5,
+                        previous_path=None,
+                    ),
+                    CommitFile(
+                        path="src/missing.py",
+                        status="modified",
+                        additions=1,
+                        deletions=0,
+                        changes=1,
+                        previous_path=None,
+                    ),
+                    CommitFile(
+                        path="",
+                        status="modified",
+                        additions=1,
+                        deletions=0,
+                        changes=1,
+                        previous_path=None,
+                    ),
+                ],
+            )
+        },
+        commit_file_outputs={},
+        failing_commit_files={(commit.sha, "src/missing.py"): "download boom"},
+    )
+
+    result = export_pr_commit_files(config, gh)
+
+    assert result.skipped_files == 3
+    assert result.skipped_file_reasons == {
+        "removed": 1,
+        "download_failed": 1,
+        "missing_path": 1,
+    }

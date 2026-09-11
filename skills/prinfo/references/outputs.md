@@ -139,6 +139,45 @@ differ after a rebase or a squash merge. `author_login` and `committer_login`
 are the corresponding GitHub accounts, resolved from the commit email, and
 are `null` when that email matches no GitHub user.
 
+## Commit files manifest structure
+
+`commits-manifest.json`, produced by `--export-commit-files`, has six
+top-level keys:
+
+- `repo`
+- `pr_number`
+- `commit_count`
+- `exported_files`
+- `skipped_files`
+- `commits`
+
+Each entry in `commits` carries:
+
+- `commit`
+- `folder`
+- `manifest_path`
+- `exported_files`
+- `skipped_files`
+- `skipped`
+
+The per-commit `skipped` array mirrors the `skipped` list written to that
+commit's own `_commit.json`. Each entry carries `path`, `status`,
+`additions`, `deletions`, `changes`, `previous_path`, `reason_code`, and
+`reason`, so the reason for every skipped file is readable from
+`commits-manifest.json` alone, without opening each commit folder.
+
+## How to explain a skipped commit file
+
+Use the recorded `reason_code` in a commit's `skipped` entries instead of
+treating every skip the same way:
+
+- `removed` - the file was deleted in that commit, so it cannot be
+  downloaded at that revision. Normal, not actionable.
+- `missing_path` - the commit payload did not include a path for the file.
+  Normal, not actionable.
+- `download_failed` - `gh` errored while downloading the file. This is the
+  one worth investigating; inspect `reason` for the underlying `gh` error.
+
 ## How to explain a skipped comment source
 
 Use the recorded `source`, `reason_code`, and `reason` in `skipped_sources`

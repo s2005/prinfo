@@ -42,16 +42,21 @@ list-repair steps had nothing to change; the derived-set comparison confirms it.
 
 Requirements: REQ-2, REQ-3, REQ-4
 
-- [ ] Bring the supported-keys list in `skills/prinfo/references/commands.md` to the set derived in Phase 1.
-- [ ] Keep the list in this file rather than pointing at `README.md`.
-- [ ] Keep the `--skip-empty-logs` sentence.
-- [ ] Keep the sentence about CLI flags overriding env-file values.
-- [ ] Add the env-file-origin sentence, reusing the Phase 1 wording.
-- [ ] Add the `PRINFO_ENV_FILE` coverage, reusing the Phase 1 wording.
-- [ ] Confirm the new heading text does not collide with `## Environment file driven run`.
-- [ ] Run `markdownlint-cli2 "**/*.md" "#node_modules"`.
-- [ ] Run the derived-set comparison for `commands.md` and confirm it is empty.
-- [ ] Run `uv run pytest` and `uv run ruff check .` and confirm `git diff` touches no file under `src/` or `tests/`.
+- [x] Bring the supported-keys list in `skills/prinfo/references/commands.md` to the set derived in Phase 1.
+- [x] Keep the list in this file rather than pointing at `README.md`.
+- [x] Keep the `--skip-empty-logs` sentence.
+- [x] Keep the sentence about CLI flags overriding env-file values.
+- [x] Add the env-file-origin sentence, reusing the Phase 1 wording.
+- [x] Add the `PRINFO_ENV_FILE` coverage, reusing the Phase 1 wording.
+- [x] Confirm the new heading text does not collide with `## Environment file driven run`.
+- [x] Run `markdownlint-cli2 "**/*.md" "#node_modules"`.
+- [x] Run the derived-set comparison for `commands.md` and confirm it is empty.
+- [x] Run `uv run pytest` and `uv run ruff check .` and confirm `git diff` touches no file under `src/` or `tests/`.
+
+The new heading is nested as a level-3 heading under `## Environment file driven run`
+rather than added as a level-2 sibling: every level-2 heading in that file is a
+runnable recipe, and the new content is prose qualifying the list above it. This
+also mirrors the `README.md` structure from Phase 1.
 
 ## Review Feedback
 

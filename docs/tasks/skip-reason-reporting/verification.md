@@ -208,7 +208,7 @@ The feature can be accepted when all items are true:
 - [x] AC-5 - the commit-file and check-log summary branches in
       `src/prinfo/cli.py` both call the same shared severity-logging
       function - verified by: Phase 2 and Phase 3 verification
-- [ ] AC-6 - a test drives `export_pr_comments` through each of the four
+- [x] AC-6 - a test drives `export_pr_comments` through each of the four
       source failures, one per run, and asserts every `reason_code` recorded
       in the `skipped_sources` array of `comments.json` is
       `"source_unavailable"`, the single actionable code, with no production

@@ -1154,6 +1154,31 @@ def test_export_pr_comments_raises_when_every_source_fails(tmp_path: Path) -> No
         export_pr_comments(config, gh)
 
 
+@pytest.mark.parametrize(
+    "source_name",
+    ["issue_comments", "review_comments", "reviews", "review_threads"],
+)
+def test_export_pr_comments_only_ever_records_source_unavailable(
+    tmp_path: Path, source_name: str
+) -> None:
+    # All four comment sources fail for the same reason: a gh call failed.
+    # If a second reason code ever shows up here, the "no severity split
+    # needed" decision from issue #3 needs revisiting.
+    config = _comments_config(tmp_path=tmp_path)
+    gh = FakeGhCli(
+        failing_comment_sources={source_name: "gh: Not Found (HTTP 404)"},
+    )
+
+    result = export_pr_comments(config, gh)
+
+    payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert len(payload["skipped_sources"]) == 1
+    skipped_entry = payload["skipped_sources"][0]
+    assert skipped_entry["source"] == source_name
+    assert skipped_entry["reason_code"] == "source_unavailable"
+    assert result.skipped_sources == 1
+
+
 def test_export_pr_comments_maps_thread_state_onto_review_comments(tmp_path: Path) -> None:
     config = _comments_config(tmp_path=tmp_path)
     matched_comment = ReviewComment(

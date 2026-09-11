@@ -85,14 +85,16 @@ Requirements: REQ-3, REQ-4
 
 Requirements: REQ-6
 
-- [ ] Confirm no production code change is needed in `export_pr_comments` or
+- [x] Confirm no production code change is needed in `export_pr_comments` or
       in the `skipped_sources` branch of `_log_mode_summaries`.
-- [ ] Add a test driving `export_pr_comments` through all four source
+- [x] Add a test driving `export_pr_comments` through all four source
       failures and asserting every recorded `reason_code` is
       `"source_unavailable"`.
-- [ ] Run `uv run pytest tests/test_exporter.py -k comments`.
-- [ ] Confirm `git diff src/prinfo/exporter.py src/prinfo/cli.py` shows no
-      change from the end of Phase 3.
+- [x] Run `uv run pytest tests/test_exporter.py -k comments` - passes;
+      89 tests overall, up from 85, which is exactly the four new
+      parametrized cases.
+- [x] Confirm `git diff src/prinfo/exporter.py src/prinfo/cli.py` shows no
+      change from the end of Phase 3 - `git diff --stat -- src` is empty.
 
 ## Phase 5: Documentation
 

@@ -1,0 +1,98 @@
+# Progress: Skip Reason Severity Reporting
+
+## Status Legend
+
+| Marker | Meaning |
+| ------ | ------- |
+| `[ ]` | Not started |
+| `[x]` | Complete |
+| `[~]` | In progress |
+| `[!]` | Blocked or needs decision |
+| `[-]` | Skipped / not applicable |
+
+## Planning Checklist
+
+- [x] Analyze current behavior.
+- [x] Create open_questions.md and resolve every entry
+- [x] Create analysis.md
+- [x] Create PRD.md
+- [x] Create implementation_plan.md
+- [x] Create verification.md
+- [x] Create progress.md
+
+## Phase 1: Commit finished commit-export work
+
+Requirements: REQ-1, REQ-2
+
+- [x] `commits-manifest.json` per-commit records embed the full `skipped`
+      array (`_CommitFolderResult`, `src/prinfo/exporter.py`).
+- [x] `CommitExportResult.skipped_file_reasons` breakdown implemented.
+- [x] `ACTIONABLE_COMMIT_SKIP_REASONS` implemented and read by the
+      commit-file branch of `_log_mode_summaries`.
+- [x] WARNING/INFO split implemented for the commit-file summary
+      (`src/prinfo/cli.py:195-207`).
+- [x] Four supporting tests (two regression, two positive-path) added.
+- [x] `README.md` and `skills/prinfo/references/outputs.md` updated for the
+      commit-file skip-reason sections.
+- [ ] Stage and commit the six affected files as one commit, per Q6.
+- [ ] Run `uv run pytest`, `uv run ruff check src tests`,
+      `npx pyright src/prinfo/exporter.py src/prinfo/cli.py` and
+      `npx markdownlint-cli2 "**/*.md" "#node_modules"` against the commit.
+
+## Phase 2: Shared severity helper
+
+Requirements: REQ-5
+
+- [ ] Add `_log_skip_severity` to `src/prinfo/cli.py`.
+- [ ] Route the commit-file branch of `_log_mode_summaries` through
+      `_log_skip_severity`.
+- [ ] Confirm the four existing commit-file severity tests pass unchanged.
+- [ ] Add direct unit tests for `_log_skip_severity` covering mixed,
+      actionable-only, benign-only and zero-total breakdowns.
+- [ ] Run `uv run pytest tests/test_cli.py` and `uv run ruff check src tests`.
+
+## Phase 3: Check-log severity split
+
+Requirements: REQ-3, REQ-4
+
+- [ ] Add `ACTIONABLE_CHECK_SKIP_REASONS` to `src/prinfo/exporter.py`.
+- [ ] Add `skipped_check_reasons` to `ExportResult`.
+- [ ] Populate `skipped_check_reasons` in `export_pr_check_logs` via
+      `collections.Counter`.
+- [ ] Change the `unsupported_check_type` per-item log from WARNING to INFO.
+- [ ] Leave the `missing_log_content` per-item log at WARNING.
+- [ ] Route the check-log branch of `_log_mode_summaries` through
+      `_log_skip_severity` with the check-log actionable set and messages.
+- [ ] Add exporter tests for the `skipped_check_reasons` breakdown.
+- [ ] Add exporter tests asserting per-item log level via `caplog`.
+- [ ] Add CLI tests for the mixed-reason WARNING/INFO split.
+- [ ] Add a CLI test proving a benign-only check-log result produces no
+      WARNING.
+- [ ] Run `uv run pytest tests/test_exporter.py tests/test_cli.py`,
+      `uv run ruff check src tests` and
+      `npx pyright src/prinfo/exporter.py src/prinfo/cli.py`.
+
+## Phase 4: Comment-source finding and guard test
+
+Requirements: REQ-6
+
+- [ ] Confirm no production code change is needed in `export_pr_comments` or
+      in the `skipped_sources` branch of `_log_mode_summaries`.
+- [ ] Add a test driving `export_pr_comments` through all four source
+      failures and asserting every recorded `reason_code` is
+      `"source_unavailable"`.
+- [ ] Run `uv run pytest tests/test_exporter.py -k comments`.
+- [ ] Confirm `git diff src/prinfo/exporter.py src/prinfo/cli.py` shows no
+      change from the end of Phase 3.
+
+## Phase 5: Documentation
+
+Requirements: REQ-7
+
+- [ ] Update `README.md` with the check-log severity split.
+- [ ] Update `skills/prinfo/references/outputs.md`'s
+      `## How to explain skipped checks` section with the actionable/benign
+      classification and the per-item log-level change.
+- [ ] Run `npx markdownlint-cli2 "**/*.md" "#node_modules"`.
+- [ ] Cross-check every reason code and log level named in the docs against
+      `src/prinfo/exporter.py`.

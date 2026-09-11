@@ -79,7 +79,7 @@ You can also load configuration from an env file:
 uv run prinfo --env-file some.env
 ```
 
-Supported env keys:
+Supported env-file keys:
 
 - `PRINFO_PR`
 - `PRINFO_REPO`
@@ -93,7 +93,20 @@ Supported env keys:
 - `PRINFO_GH_CONFIG_DIR`
 - `PRINFO_LOG_LEVEL`
 
+These keys are read from the env file only. They are not picked up from
+exported shell variables.
+
 CLI arguments override env-file values.
+
+### Choosing the env file with PRINFO_ENV_FILE
+
+`PRINFO_ENV_FILE` is read from the process environment, not from the env
+file, so it cannot be set inside the file it names. It names the env file
+that the keys listed above are read from.
+
+`PRINFO_ENV_FILE` is the env counterpart of `--env-file`. When both are
+given, `--env-file` takes precedence. When neither is given, `prinfo` falls
+back to a `.env` file in the current directory if one exists.
 
 ## Multiple GitHub accounts
 

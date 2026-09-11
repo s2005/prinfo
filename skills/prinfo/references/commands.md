@@ -95,9 +95,24 @@ Supported keys:
 - `PRINFO_LOG_LEVEL`
 - `PRINFO_EXPORT_COMMENTS`
 - `PRINFO_EXPORT_COMMIT_LOG`
+- `PRINFO_EXPORT_COMMIT_FILES`
+- `PRINFO_SKIP_CHECK_LOGS`
+
+These keys are read from the env file only. They are not picked up from
+exported shell variables.
 
 Remember that explicit CLI flags override values from the env file.
 There is currently no env-file key for `--skip-empty-logs`.
+
+### Choosing the env file with PRINFO_ENV_FILE
+
+`PRINFO_ENV_FILE` is read from the process environment, not from the env
+file, so it cannot be set inside the file it names. It names the env file
+that the keys listed above are read from.
+
+`PRINFO_ENV_FILE` is the env counterpart of `--env-file`. When both are
+given, `--env-file` takes precedence. When neither is given, `prinfo` falls
+back to a `.env` file in the current directory if one exists.
 
 ## Alternate GitHub account with token
 

@@ -100,10 +100,14 @@ Requirements: REQ-6
 
 Requirements: REQ-7
 
-- [ ] Update `README.md` with the check-log severity split.
-- [ ] Update `skills/prinfo/references/outputs.md`'s
+- [x] Update `README.md` with the check-log severity split.
+- [x] Update `skills/prinfo/references/outputs.md`'s
       `## How to explain skipped checks` section with the actionable/benign
       classification and the per-item log-level change.
-- [ ] Run `npx markdownlint-cli2 "**/*.md" "#node_modules"`.
-- [ ] Cross-check every reason code and log level named in the docs against
-      `src/prinfo/exporter.py`.
+- [x] Run `npx markdownlint-cli2 "**/*.md" "#node_modules"` - 55 files,
+      0 errors.
+- [x] Cross-check every reason code and log level named in the docs against
+      `src/prinfo/exporter.py` - `unsupported_check_type` is logged by
+      `LOGGER.info` and is absent from `ACTIONABLE_CHECK_SKIP_REASONS`;
+      `missing_log_content` is logged by `LOGGER.warning` and is the set's
+      only member. Both summary message strings match `src/prinfo/cli.py`.

@@ -213,7 +213,7 @@ The feature can be accepted when all items are true:
       in the `skipped_sources` array of `comments.json` is
       `"source_unavailable"`, the single actionable code, with no production
       code change made - verified by: Phase 4 verification
-- [ ] AC-7 - `README.md` and `skills/prinfo/references/outputs.md` document
+- [x] AC-7 - `README.md` and `skills/prinfo/references/outputs.md` document
       the check-log actionable and benign reason codes, the WARNING/INFO
       summary split, and the per-item log-level change, and
       `markdownlint-cli2` reports no findings on either file - verified by:

@@ -69,10 +69,20 @@ skips checks in two common cases:
 - GitHub exposes the check, but the job log endpoint returns `404` or
   `Not Found`
 
-Use `reason_code` to distinguish those cases structurally:
+Use `reason_code` to distinguish those cases structurally, and to tell a skip
+that needs action from one that does not:
 
-- `unsupported_check_type`
-- `missing_log_content`
+- `unsupported_check_type` - the check is not a GitHub Actions job, so it never
+  had a log to download. Normal, not actionable. Logged per check at INFO.
+- `missing_log_content` - a real Actions job did not return the log it should
+  have. This is the one worth investigating; inspect `reason` for the
+  underlying `gh` error. Logged per check at WARNING.
+
+The command summary applies the same split. It warns about the
+`missing_log_content` count and reports the `unsupported_check_type` count at
+INFO, so a run whose every skipped check is `unsupported_check_type` produces
+no warning at all. Do not read a missing warning as "no checks were skipped" -
+read the INFO line, or the `skipped` array in `manifest.json`.
 
 ## How to explain empty exported entries
 

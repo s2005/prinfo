@@ -119,7 +119,13 @@ The command writes:
 - optional `commit-log.json` when `--export-commit-log` is enabled
 
 Checks that are not backed by GitHub Actions jobs are skipped and
-recorded in the manifest.
+recorded in the manifest under the reason code `unsupported_check_type`. That
+skip is normal and nobody can act on it, so it is logged at `INFO` per check
+and counted in an `INFO` summary line. A check that is a real Actions job but
+returns no downloadable log is recorded as `missing_log_content` and logged at
+`WARNING`, both per check and in the summary, because it is the one worth
+investigating. A run whose every skipped check is `unsupported_check_type`
+therefore produces no warning.
 
 When `--skip-empty-logs` is enabled, empty logs are still recorded in the
 manifest but their `path` is left empty and no zero-byte file is written.

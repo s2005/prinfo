@@ -120,7 +120,7 @@ Expected: no output. A documentation task that touched a source or test file has
 
 The feature can be accepted when all items are true:
 
-- [ ] AC-1 - the supported-env-keys list in `README.md` matches the set read from `env_values` in `src/prinfo/config.py`, with no missing key and no extra - verified by: Phase 1 verification
+- [x] AC-1 - the supported-env-keys list in `README.md` matches the set read from `env_values` in `src/prinfo/config.py`, with no missing key and no extra - verified by: Phase 1 verification
 - [ ] AC-2 - the supported-keys list in `skills/prinfo/references/commands.md` matches that same set and the `--skip-empty-logs` sentence survives - verified by: Phase 2 verification
 - [ ] AC-3 - both documents carry a `PRINFO_ENV_FILE` subsection stating process-environment origin, `--env-file` precedence and the `.env` fallback - verified by: Phase 1 and Phase 2 verification, read against `src/prinfo/config.py:92-102`
 - [ ] AC-4 - both documents state the listed keys are read from the env file rather than from exported shell variables - verified by: Phase 1 and Phase 2 verification

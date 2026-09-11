@@ -113,7 +113,8 @@ The command writes:
 - `manifest.json` with exported and skipped checks
 - optional `commits/<commit-sha>/...` folders when `--export-commit-files` is enabled
 - optional `commits/<commit-sha>/_commit.json` per commit
-- optional `commits-manifest.json` with the PR commit list and per-commit summaries
+- optional `commits-manifest.json` with the PR commit list, per-commit
+  summaries, and why each skipped file was skipped
 - optional `comments.json` and `comments.md` when `--export-comments` is enabled
 - optional `commit-log.json` when `--export-commit-log` is enabled
 

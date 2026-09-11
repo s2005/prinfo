@@ -41,6 +41,7 @@ class ExportResult:
     exported_logs: int
     manifest_only_logs: int
     skipped_checks: int
+    skipped_check_reasons: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -111,12 +112,13 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
 
     exported: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
+    skipped_check_reasons: Counter[str] = Counter()
     saved_logs = 0
     manifest_only_logs = 0
 
     for index, check in enumerate(checks, start=1):
         if check.job_id is None:
-            LOGGER.warning("Skipping check without downloadable job log: %s", check.name)
+            LOGGER.info("Skipping check without downloadable job log: %s", check.name)
             skipped.append(
                 _skipped_record(
                     check=check,
@@ -124,6 +126,7 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
                     reason_code="unsupported_check_type",
                 )
             )
+            skipped_check_reasons["unsupported_check_type"] += 1
             continue
 
         LOGGER.info("Downloading log for check '%s' (job %s)", check.name, check.job_id)
@@ -144,6 +147,7 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
                     reason_code="missing_log_content",
                 )
             )
+            skipped_check_reasons["missing_log_content"] += 1
             continue
 
         has_log_content = log_text != ""
@@ -203,6 +207,7 @@ def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
         exported_logs=saved_logs,
         manifest_only_logs=manifest_only_logs,
         skipped_checks=len(skipped),
+        skipped_check_reasons=dict(skipped_check_reasons),
     )
 
 
@@ -427,6 +432,12 @@ def slugify(value: str) -> str:
 # that cannot exist at the requested revision and need no action; "download_failed"
 # means gh errored while fetching a file that should have been retrievable.
 ACTIONABLE_COMMIT_SKIP_REASONS = frozenset({"download_failed"})
+
+# Reason codes a caller should act on. "unsupported_check_type" describes a check
+# that is not a GitHub Actions job, so it never had a log to download and needs no
+# action; "missing_log_content" means a real Actions job did not return the log it
+# should have.
+ACTIONABLE_CHECK_SKIP_REASONS = frozenset({"missing_log_content"})
 
 
 @dataclass(frozen=True)

@@ -196,16 +196,16 @@ The feature can be accepted when all items are true:
       `download_failed` count and one INFO naming the combined benign count
       - verified by: Phase 1 verification, the four pre-existing commit-file
       severity tests
-- [ ] AC-3 - a check-log export mixing `missing_log_content` with
+- [x] AC-3 - a check-log export mixing `missing_log_content` with
       `unsupported_check_type` skips produces one WARNING naming only the
       `missing_log_content` count and one INFO naming the
       `unsupported_check_type` count, and `ExportResult.skipped_check_reasons`
       reports the correct per-reason-code breakdown - verified by: Phase 3
       verification
-- [ ] AC-4 - a check with `unsupported_check_type` logs its per-item skip at
+- [x] AC-4 - a check with `unsupported_check_type` logs its per-item skip at
       INFO and a check with `missing_log_content` logs its per-item skip at
       WARNING - verified by: Phase 3 verification, the `caplog` tests
-- [ ] AC-5 - the commit-file and check-log summary branches in
+- [x] AC-5 - the commit-file and check-log summary branches in
       `src/prinfo/cli.py` both call the same shared severity-logging
       function - verified by: Phase 2 and Phase 3 verification
 - [ ] AC-6 - a test drives `export_pr_comments` through each of the four

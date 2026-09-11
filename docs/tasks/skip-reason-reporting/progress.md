@@ -61,22 +61,25 @@ Requirements: REQ-5
 
 Requirements: REQ-3, REQ-4
 
-- [ ] Add `ACTIONABLE_CHECK_SKIP_REASONS` to `src/prinfo/exporter.py`.
-- [ ] Add `skipped_check_reasons` to `ExportResult`.
-- [ ] Populate `skipped_check_reasons` in `export_pr_check_logs` via
+- [x] Add `ACTIONABLE_CHECK_SKIP_REASONS` to `src/prinfo/exporter.py`.
+- [x] Add `skipped_check_reasons` to `ExportResult`.
+- [x] Populate `skipped_check_reasons` in `export_pr_check_logs` via
       `collections.Counter`.
-- [ ] Change the `unsupported_check_type` per-item log from WARNING to INFO.
-- [ ] Leave the `missing_log_content` per-item log at WARNING.
-- [ ] Route the check-log branch of `_log_mode_summaries` through
+- [x] Change the `unsupported_check_type` per-item log from WARNING to INFO.
+- [x] Leave the `missing_log_content` per-item log at WARNING.
+- [x] Route the check-log branch of `_log_mode_summaries` through
       `_log_skip_severity` with the check-log actionable set and messages.
-- [ ] Add exporter tests for the `skipped_check_reasons` breakdown.
-- [ ] Add exporter tests asserting per-item log level via `caplog`.
-- [ ] Add CLI tests for the mixed-reason WARNING/INFO split.
-- [ ] Add a CLI test proving a benign-only check-log result produces no
+- [x] Add exporter tests for the `skipped_check_reasons` breakdown.
+- [x] Add exporter tests asserting per-item log level via `caplog`.
+- [x] Add CLI tests for the mixed-reason WARNING/INFO split.
+- [x] Add a CLI test proving a benign-only check-log result produces no
       WARNING.
-- [ ] Run `uv run pytest tests/test_exporter.py tests/test_cli.py`,
+- [x] Run `uv run pytest tests/test_exporter.py tests/test_cli.py`,
       `uv run ruff check src tests` and
-      `npx pyright src/prinfo/exporter.py src/prinfo/cli.py`.
+      `npx pyright src/prinfo/exporter.py src/prinfo/cli.py` - 85 passed
+      overall (up from 80), `ruff` clean, `pyright` 0 errors.
+- [x] Add a CLI test that patches `_log_skip_severity` once and asserts both
+      the check-log and commit-file branches call it (AC-5).
 
 ## Phase 4: Comment-source finding and guard test
 

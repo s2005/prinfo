@@ -5,7 +5,13 @@ import pytest
 
 from prinfo import __version__
 from prinfo.cli import _log_skip_severity, build_parser, main
-from prinfo.exporter import CommitExportResult, ExportError
+from prinfo.exporter import (
+    ACTIONABLE_CHECK_SKIP_REASONS,
+    ACTIONABLE_COMMIT_SKIP_REASONS,
+    CommitExportResult,
+    ExportError,
+    ExportResult,
+)
 from prinfo.gh import GhCliError
 
 
@@ -446,6 +452,77 @@ def test_main_warns_only_for_actionable_commit_skips(
     assert "3 commit file(s) could not be downloaded." not in caplog.text
 
 
+def test_main_warns_and_infos_for_mixed_check_log_skips(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _make_config(skip_check_logs=False)
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_check_logs(config_arg, gh_arg):
+        return ExportResult(
+            repo="octo/repo",
+            pr_number=1,
+            output_dir=Path("out"),
+            manifest_path=Path("out/manifest.json"),
+            exported_logs=3,
+            manifest_only_logs=0,
+            skipped_checks=5,
+            skipped_check_reasons={"unsupported_check_type": 3, "missing_log_content": 2},
+        )
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_check_logs", fake_export_pr_check_logs)
+
+    with caplog.at_level(logging.INFO):
+        exit_code = main(["--pr", "1"])
+
+    assert exit_code == 0
+    warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+    info_records = [r for r in caplog.records if r.levelname == "INFO" and "check(s)" in r.getMessage()]
+    assert len(warning_records) == 1
+    assert warning_records[0].getMessage() == "2 check(s) could not produce a log."
+    assert len(info_records) == 1
+    assert info_records[0].getMessage() == "3 check(s) are not GitHub Actions jobs and were skipped."
+
+
+def test_main_does_not_warn_when_every_check_skip_is_benign(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _make_config(skip_check_logs=False)
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_check_logs(config_arg, gh_arg):
+        return ExportResult(
+            repo="octo/repo",
+            pr_number=1,
+            output_dir=Path("out"),
+            manifest_path=Path("out/manifest.json"),
+            exported_logs=3,
+            manifest_only_logs=0,
+            skipped_checks=5,
+            skipped_check_reasons={"unsupported_check_type": 5},
+        )
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_check_logs", fake_export_pr_check_logs)
+
+    with caplog.at_level(logging.WARNING):
+        exit_code = main(["--pr", "1"])
+
+    assert exit_code == 0
+    # All five skips are non-Actions checks, which is benign and needs no user action.
+    assert not any(r.levelname == "WARNING" for r in caplog.records)
+    assert "Skipped 5 check(s)." not in caplog.text
+
+
 def test_log_skip_severity_mixed_breakdown_logs_warning_and_info(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -526,3 +603,55 @@ def test_log_skip_severity_zero_total_logs_nothing(
         )
 
     assert len(caplog.records) == 0
+
+
+def test_both_summary_branches_call_one_shared_severity_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _make_config(skip_check_logs=False, export_commit_files=True)
+
+    def fake_resolve_config(args):
+        return config
+
+    def fake_export_pr_check_logs(config_arg, gh_arg):
+        return ExportResult(
+            repo="octo/repo",
+            pr_number=1,
+            output_dir=Path("out"),
+            manifest_path=Path("out/manifest.json"),
+            exported_logs=1,
+            manifest_only_logs=0,
+            skipped_checks=2,
+            skipped_check_reasons={"missing_log_content": 2},
+        )
+
+    def fake_export_pr_commit_files(config_arg, gh_arg, commits_cache_arg=None):
+        return CommitExportResult(
+            repo="octo/repo",
+            pr_number=1,
+            output_dir=Path("out"),
+            manifest_path=Path("out/commits-manifest.json"),
+            commit_count=1,
+            exported_files=1,
+            skipped_files=3,
+            skipped_file_reasons={"download_failed": 3},
+        )
+
+    calls: list[frozenset[str]] = []
+
+    def spy_log_skip_severity(logger, *, total, breakdown, actionable_reasons, **kwargs):
+        calls.append(actionable_reasons)
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", fake_resolve_config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_check_logs", fake_export_pr_check_logs)
+    monkeypatch.setattr("prinfo.cli.export_pr_commit_files", fake_export_pr_commit_files)
+    monkeypatch.setattr("prinfo.cli._log_skip_severity", spy_log_skip_severity)
+
+    exit_code = main(["--pr", "1", "--export-commit-files"])
+
+    assert exit_code == 0
+    # Patching the one helper intercepts both summary branches, which is what proves
+    # the check-log and commit-file splits share a single implementation.
+    assert calls == [ACTIONABLE_CHECK_SKIP_REASONS, ACTIONABLE_COMMIT_SKIP_REASONS]

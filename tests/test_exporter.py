@@ -380,6 +380,140 @@ def test_export_pr_check_logs_can_skip_writing_empty_log_files(tmp_path: Path) -
     assert list(config.output_dir.glob("*.log")) == []
 
 
+def test_export_pr_check_logs_reports_skipped_check_reasons_breakdown(tmp_path: Path) -> None:
+    config = AppConfig(
+        pr_number=101,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        checks=[
+            CheckRun(
+                name="build / linux",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SUCCESS",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/22",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=22,
+            ),
+            CheckRun(
+                name="external-ci",
+                workflow_name=None,
+                status="COMPLETED",
+                conclusion="SUCCESS",
+                details_url="https://ci.example.com/run/99",
+                check_type="StatusContext",
+                run_id=None,
+                job_id=None,
+            ),
+            CheckRun(
+                name="build / skipped",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SKIPPED",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/33",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=33,
+            ),
+        ],
+        failing_jobs={33: "gh: Not Found (HTTP 404)"},
+    )
+
+    result = export_pr_check_logs(config, gh)
+
+    assert result.skipped_checks == 2
+    assert result.skipped_check_reasons == {
+        "unsupported_check_type": 1,
+        "missing_log_content": 1,
+    }
+
+
+def test_export_pr_check_logs_uses_info_for_unsupported_and_warning_for_missing_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = AppConfig(
+        pr_number=102,
+        repo="octo/repo",
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host="github.com",
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+    gh = FakeGhCli(
+        checks=[
+            CheckRun(
+                name="build / linux",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SUCCESS",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/22",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=22,
+            ),
+            CheckRun(
+                name="external-ci",
+                workflow_name=None,
+                status="COMPLETED",
+                conclusion="SUCCESS",
+                details_url="https://ci.example.com/run/99",
+                check_type="StatusContext",
+                run_id=None,
+                job_id=None,
+            ),
+            CheckRun(
+                name="build / skipped",
+                workflow_name="CI",
+                status="COMPLETED",
+                conclusion="SKIPPED",
+                details_url="https://github.com/octo/repo/actions/runs/11/job/33",
+                check_type="CheckRun",
+                run_id=11,
+                job_id=33,
+            ),
+        ],
+        failing_jobs={33: "gh: Not Found (HTTP 404)"},
+    )
+
+    with caplog.at_level("INFO", logger="prinfo.exporter"):
+        export_pr_check_logs(config, gh)
+
+    unsupported_records = [
+        record for record in caplog.records if "external-ci" in record.getMessage()
+    ]
+    missing_log_records = [
+        record
+        for record in caplog.records
+        if "build / skipped" in record.getMessage() and "no downloadable log content" in record.getMessage()
+    ]
+
+    assert unsupported_records
+    assert all(record.levelname == "INFO" for record in unsupported_records)
+
+    assert missing_log_records
+    assert all(record.levelname == "WARNING" for record in missing_log_records)
+
+
 def test_export_pr_commit_files_writes_commit_folders_and_manifests(tmp_path: Path) -> None:
     commit = PrCommit(
         sha="abc1234def5678",

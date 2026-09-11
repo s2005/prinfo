@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -192,24 +193,17 @@ def _log_mode_summaries(runs: list[_ModeRun]) -> None:
                 result.repo,
                 result.output_dir,
             )
-            if result.skipped_files:
-                actionable = sum(
-                    count
-                    for reason_code, count in result.skipped_file_reasons.items()
-                    if reason_code in ACTIONABLE_COMMIT_SKIP_REASONS
-                )
-                benign = result.skipped_files - actionable
-                if actionable:
-                    logger.warning(
-                        "%s commit file(s) could not be downloaded.",
-                        actionable,
-                    )
-                if benign:
-                    logger.info(
-                        "%s commit file(s) cannot be exported (removed in the commit, "
-                        "or absent from the commit payload).",
-                        benign,
-                    )
+            _log_skip_severity(
+                logger,
+                total=result.skipped_files,
+                breakdown=result.skipped_file_reasons,
+                actionable_reasons=ACTIONABLE_COMMIT_SKIP_REASONS,
+                actionable_message="%s commit file(s) could not be downloaded.",
+                benign_message=(
+                    "%s commit file(s) cannot be exported (removed in the commit, "
+                    "or absent from the commit payload)."
+                ),
+            )
         elif isinstance(result, CommitLogExportResult):
             logger.info(
                 "Exported commit log for %s commit(s) for PR #%s in %s to %s",
@@ -225,6 +219,28 @@ def _log_mode_summaries(runs: list[_ModeRun]) -> None:
                 logger.warning("Commit file export failed: %s", run.error)
             else:
                 logger.warning("%s export failed: %s", run.name, run.error)
+
+
+def _log_skip_severity(
+    logger: logging.Logger,
+    *,
+    total: int,
+    breakdown: Mapping[str, int],
+    actionable_reasons: frozenset[str],
+    actionable_message: str,
+    benign_message: str,
+) -> None:
+    """Log a skip count split into an actionable warning and a benign info message."""
+    if not total:
+        return
+    actionable = sum(
+        count for reason_code, count in breakdown.items() if reason_code in actionable_reasons
+    )
+    benign = total - actionable
+    if actionable:
+        logger.warning(actionable_message, actionable)
+    if benign:
+        logger.info(benign_message, benign)
 
 
 def configure_logging(log_level: str) -> None:

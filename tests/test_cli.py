@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from prinfo import __version__
-from prinfo.cli import build_parser, main
+from prinfo.cli import _log_skip_severity, build_parser, main
 from prinfo.exporter import CommitExportResult, ExportError
 from prinfo.gh import GhCliError
 
@@ -444,3 +444,85 @@ def test_main_warns_only_for_actionable_commit_skips(
     # Only the two download failures are actionable; the three removed-file skips are benign.
     assert "2 commit file(s) could not be downloaded." in caplog.text
     assert "3 commit file(s) could not be downloaded." not in caplog.text
+
+
+def test_log_skip_severity_mixed_breakdown_logs_warning_and_info(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("prinfo.test_skip_severity")
+
+    with caplog.at_level(logging.INFO, logger="prinfo.test_skip_severity"):
+        _log_skip_severity(
+            logger,
+            total=5,
+            breakdown={"removed": 3, "download_failed": 2},
+            actionable_reasons=frozenset({"download_failed"}),
+            actionable_message="%s actionable item(s).",
+            benign_message="%s benign item(s).",
+        )
+
+    assert len(caplog.records) == 2
+    warning_records = [r for r in caplog.records if r.levelname == "WARNING"]
+    info_records = [r for r in caplog.records if r.levelname == "INFO"]
+    assert len(warning_records) == 1
+    assert len(info_records) == 1
+    assert warning_records[0].getMessage() == "2 actionable item(s)."
+    assert info_records[0].getMessage() == "3 benign item(s)."
+
+
+def test_log_skip_severity_actionable_only_logs_warning_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("prinfo.test_skip_severity")
+
+    with caplog.at_level(logging.INFO, logger="prinfo.test_skip_severity"):
+        _log_skip_severity(
+            logger,
+            total=4,
+            breakdown={"download_failed": 4},
+            actionable_reasons=frozenset({"download_failed"}),
+            actionable_message="%s actionable item(s).",
+            benign_message="%s benign item(s).",
+        )
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "WARNING"
+    assert caplog.records[0].getMessage() == "4 actionable item(s)."
+
+
+def test_log_skip_severity_benign_only_logs_info_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("prinfo.test_skip_severity")
+
+    with caplog.at_level(logging.INFO, logger="prinfo.test_skip_severity"):
+        _log_skip_severity(
+            logger,
+            total=6,
+            breakdown={"removed": 6},
+            actionable_reasons=frozenset({"download_failed"}),
+            actionable_message="%s actionable item(s).",
+            benign_message="%s benign item(s).",
+        )
+
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "INFO"
+    assert caplog.records[0].getMessage() == "6 benign item(s)."
+
+
+def test_log_skip_severity_zero_total_logs_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    logger = logging.getLogger("prinfo.test_skip_severity")
+
+    with caplog.at_level(logging.INFO, logger="prinfo.test_skip_severity"):
+        _log_skip_severity(
+            logger,
+            total=0,
+            breakdown={"download_failed": 3},
+            actionable_reasons=frozenset({"download_failed"}),
+            actionable_message="%s actionable item(s).",
+            benign_message="%s benign item(s).",
+        )
+
+    assert len(caplog.records) == 0

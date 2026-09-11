@@ -40,6 +40,7 @@ are implemented exactly as `implementation_plan.md` specifies.
 | D1 | `progress.md` Phase 1 items ticked, each naming `2bedef1`; the "uncommitted" wording corrected in `PRD.md` Background, `implementation_plan.md` Phase 1 and `verification.md` Pre-Implementation Verification |
 | D2 | `verification.md` "Current Skip-Reason Shape" rewritten to describe the merged state it now finds |
 | D3 | REQ-4's sentence corrected: only `removed` logs per item at INFO; `missing_path` records its skip without logging |
+| D4 | Phase 4's guard test fails one comment source per call, once per source, and reads the `reason_code` from `comments.json` rather than from the result object; `implementation_plan.md` Phase 4 and `PRD.md` AC-6 corrected to match |
 
 ## Files to change
 
@@ -72,6 +73,8 @@ are implemented exactly as `implementation_plan.md` specifies.
    per-item log from WARNING to INFO, and route the `ExportResult` summary
    branch through `_log_skip_severity`.
 4. **Phase 4** - add the comment-source guard test only. No production change.
+   Per drift D4, the test fails one source per call, parametrized over all
+   four, and asserts the `reason_code` in the written `comments.json`.
 5. **Phase 5** - document the check-log split in `README.md` and
    `skills/prinfo/references/outputs.md`.
 

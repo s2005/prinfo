@@ -47,13 +47,15 @@ Requirements: REQ-1, REQ-2
 
 Requirements: REQ-5
 
-- [ ] Add `_log_skip_severity` to `src/prinfo/cli.py`.
-- [ ] Route the commit-file branch of `_log_mode_summaries` through
+- [x] Add `_log_skip_severity` to `src/prinfo/cli.py`.
+- [x] Route the commit-file branch of `_log_mode_summaries` through
       `_log_skip_severity`.
-- [ ] Confirm the four existing commit-file severity tests pass unchanged.
-- [ ] Add direct unit tests for `_log_skip_severity` covering mixed,
+- [x] Confirm the four existing commit-file severity tests pass unchanged.
+- [x] Add direct unit tests for `_log_skip_severity` covering mixed,
       actionable-only, benign-only and zero-total breakdowns.
-- [ ] Run `uv run pytest tests/test_cli.py` and `uv run ruff check src tests`.
+- [x] Run `uv run pytest tests/test_cli.py` and `uv run ruff check src tests` -
+      20 passed in `tests/test_cli.py`, 80 passed overall (up from 76), `ruff`
+      clean, `pyright` 0 errors.
 
 ## Phase 3: Check-log severity split
 

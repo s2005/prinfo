@@ -116,8 +116,8 @@ uv run pytest tests/test_exporter.py -k comments -q
 git diff src/prinfo/exporter.py src/prinfo/cli.py
 ```
 
-Expected: the guard test passes, asserting every `reason_code` recorded by
-`export_pr_comments` across all four failing sources is
+Expected: the guard test passes for each of the four sources in turn,
+asserting the `reason_code` `export_pr_comments` writes to `comments.json` is
 `"source_unavailable"`; the `git diff` against the end of Phase 3 is empty
 for both files, confirming REQ-6 added no production code.
 
@@ -208,10 +208,11 @@ The feature can be accepted when all items are true:
 - [ ] AC-5 - the commit-file and check-log summary branches in
       `src/prinfo/cli.py` both call the same shared severity-logging
       function - verified by: Phase 2 and Phase 3 verification
-- [ ] AC-6 - a test drives `export_pr_comments` through all four source
-      failures and asserts every `reason_code` recorded in `skipped_sources`
-      is `"source_unavailable"`, the single actionable code, with no
-      production code change made - verified by: Phase 4 verification
+- [ ] AC-6 - a test drives `export_pr_comments` through each of the four
+      source failures, one per run, and asserts every `reason_code` recorded
+      in the `skipped_sources` array of `comments.json` is
+      `"source_unavailable"`, the single actionable code, with no production
+      code change made - verified by: Phase 4 verification
 - [ ] AC-7 - `README.md` and `skills/prinfo/references/outputs.md` document
       the check-log actionable and benign reason codes, the WARNING/INFO
       summary split, and the per-item log-level change, and

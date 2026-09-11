@@ -51,6 +51,37 @@ inferred from the task documents.
   This does not change the check-log work REQ-4 asks for, but the sentence it
   reasons from is inaccurate.
 
+### D4: The Phase 4 guard test cannot be written the way the plan describes
+
+- **Spec reference**: `implementation_plan.md`, "Test Work - Phase 4" ("drive
+  `export_pr_comments` with a fake `GhCli` whose `list_pr_issue_comments`,
+  `list_pr_review_comments`, `list_pr_reviews` and `list_pr_review_threads`
+  each raise `GhCliError`, and assert every `reason_code` recorded in the
+  result's `skipped_sources` equals `"source_unavailable"`"); `PRD.md`, AC-6
+  ("a test drives `export_pr_comments` through all four source failures and
+  asserts every `reason_code` recorded in `skipped_sources` is
+  `"source_unavailable"`").
+- **Code reference**: two independent obstacles.
+  - `src/prinfo/exporter.py:253-254` - `if len(skipped_sources) == 4: raise
+    ExportError(...)`. Failing all four sources in one call raises before any
+    result is returned, so there is nothing to assert against. That path is
+    already covered by
+    `tests/test_exporter.py:1006` (`test_export_pr_comments_raises_when_every_source_fails`).
+  - `src/prinfo/exporter.py:98` - `CommentExportResult.skipped_sources: int`.
+    The result carries a count, not records. The `reason_code` values exist
+    only in the `skipped_sources` array written to `comments.json`.
+- **Difference**: "the result's `skipped_sources`" holds no reason codes, and
+  driving all four failures in a single call cannot produce a result at all.
+
+### D4 resolution
+
+Fail exactly one source per call, once for each of the four sources, and assert
+the single `skipped_sources` entry in the written `comments.json` carries
+`reason_code == "source_unavailable"` and the expected `source`. This still
+drives every one of the four call sites through its failure path, which is what
+AC-6 is actually protecting, and it returns a result each time. It does not
+duplicate the existing all-four-fail test, which asserts the `ExportError`.
+
 ## Candidate solutions
 
 ### 01: Treat Phase 1 as satisfied by history, amend the task documents, implement Phases 2 to 5

@@ -182,6 +182,15 @@ line shows no WARNING when every skip is `unsupported_check_type`; a check
 whose log content is genuinely missing still logs at WARNING both per item
 and in the summary.
 
+Not run in this implementation run: it needs a live PR with a real external
+status check and authenticated `gh`. No acceptance criterion depends on it.
+The same three behaviours are asserted against the real code paths by
+`test_export_pr_check_logs_uses_info_for_unsupported_and_warning_for_missing_log`
+(per-item levels, AC-4),
+`test_main_does_not_warn_when_every_check_skip_is_benign` (no summary WARNING
+for an all-benign run, AC-3) and
+`test_main_warns_and_infos_for_mixed_check_log_skips` (AC-3).
+
 ## Final Acceptance Verification
 
 The feature can be accepted when all items are true:
@@ -218,8 +227,8 @@ The feature can be accepted when all items are true:
       summary split, and the per-item log-level change, and
       `markdownlint-cli2` reports no findings on either file - verified by:
       Phase 5 verification
-- [ ] AC-8 - `uv run ruff check src tests` is clean on the finished branch,
+- [x] AC-8 - `uv run ruff check src tests` is clean on the finished branch,
       with no suppression directive added - verified by: Linter section
-- [ ] AC-9 - `uv run pytest -q` passes on the finished branch, with the test
+- [x] AC-9 - `uv run pytest -q` passes on the finished branch, with the test
       count higher than the pre-task baseline and no previously passing test
       removed or weakened - verified by: Regression Check section

@@ -34,10 +34,14 @@ Requirements: REQ-1, REQ-2
 - [x] Four supporting tests (two regression, two positive-path) added.
 - [x] `README.md` and `skills/prinfo/references/outputs.md` updated for the
       commit-file skip-reason sections.
-- [ ] Stage and commit the six affected files as one commit, per Q6.
-- [ ] Run `uv run pytest`, `uv run ruff check src tests`,
+- [x] Stage and commit the six affected files as one commit, per Q6 - done as
+      `2bedef1`, "Explain skipped commit files and split their severity (#4)",
+      body `Closes #3`. Not repeated in this run; see `notes.md` drift D1.
+- [x] Run `uv run pytest`, `uv run ruff check src tests`,
       `npx pyright src/prinfo/exporter.py src/prinfo/cli.py` and
-      `npx markdownlint-cli2 "**/*.md" "#node_modules"` against the commit.
+      `npx markdownlint-cli2 "**/*.md" "#node_modules"` against the commit -
+      re-run at the start of this run against `2bedef1`: 76 passed, `ruff`
+      clean, `pyright` 0 errors, `markdownlint-cli2` clean.
 
 ## Phase 2: Shared severity helper
 

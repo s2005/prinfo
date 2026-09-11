@@ -27,8 +27,9 @@ one that signals a real failure.
    (`src/prinfo/cli.py:167`) and `skipped_sources` (`:180`) share the same
    pattern and are "worth fixing once rather than three times."
 
-Items 1 and 2 are already implemented, tested and verified in the working
-tree on `fix/commit-skip-reasons-repro` (uncommitted): `commits-manifest.json`
+Items 1 and 2 are already implemented, tested, verified and merged. They
+shipped as commit `2bedef1`, "Explain skipped commit files and split their
+severity (#4)", whose body reads `Closes #3`: `commits-manifest.json`
 per-commit records now embed the full `skipped` array, and
 `ACTIONABLE_COMMIT_SKIP_REASONS = frozenset({"download_failed"})`
 (`src/prinfo/exporter.py:429`) drives a severity split in
@@ -88,8 +89,9 @@ non-zero, an INFO naming the benign count when non-zero.
 `export_pr_check_logs` currently logs both check-log skip reasons at WARNING
 (`src/prinfo/exporter.py:119` for `unsupported_check_type`, `:135` for
 `missing_log_content`). The `unsupported_check_type` per-item log moves to
-INFO, matching the treatment `removed` and `missing_path` already get in
-commit-file export (`src/prinfo/exporter.py:466`, INFO). The
+INFO, matching the treatment `removed` already gets in commit-file export
+(`src/prinfo/exporter.py:466`, INFO). `missing_path` records its skip without
+logging a per-item line at all (`src/prinfo/exporter.py:452-463`). The
 `missing_log_content` per-item log stays at WARNING, matching
 `download_failed` (`src/prinfo/exporter.py:483`, WARNING). This is a visible
 behaviour change: a run against a PR with only external CI checks no longer

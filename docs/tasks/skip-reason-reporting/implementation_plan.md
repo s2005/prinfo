@@ -37,17 +37,21 @@ Requirements: REQ-1, REQ-2
 
 ### Implementation Work - Phase 1
 
-- No source change. The working tree on `fix/commit-skip-reasons-repro`
-  already carries the finished commit-export fix: `_CommitFolderResult`
-  embedding `skipped` into `commits-manifest.json` records (REQ-1),
-  `CommitExportResult.skipped_file_reasons`, `ACTIONABLE_COMMIT_SKIP_REASONS`
-  and the WARNING/INFO split in `src/prinfo/cli.py:195-207` (REQ-2), the four
-  supporting tests, and the doc updates for the commit-file skip-reason
-  sections in `README.md` and `skills/prinfo/references/outputs.md`.
-- Stage `src/prinfo/exporter.py`, `src/prinfo/cli.py`, `tests/test_exporter.py`,
-  `tests/test_cli.py`, `README.md` and `skills/prinfo/references/outputs.md`
-  and commit them as one commit closing the two numbered defects in issue #3,
-  per Q6.
+- No source change. Commit `2bedef1`, "Explain skipped commit files and split
+  their severity (#4)", already carries the finished commit-export fix:
+  `_CommitFolderResult` embedding `skipped` into `commits-manifest.json`
+  records (REQ-1), `CommitExportResult.skipped_file_reasons`,
+  `ACTIONABLE_COMMIT_SKIP_REASONS` and the WARNING/INFO split in
+  `src/prinfo/cli.py:195-212` (REQ-2), the four supporting tests, and the doc
+  updates for the commit-file skip-reason sections in `README.md` and
+  `skills/prinfo/references/outputs.md`.
+- The six files - `src/prinfo/exporter.py`, `src/prinfo/cli.py`,
+  `tests/test_exporter.py`, `tests/test_cli.py`, `README.md` and
+  `skills/prinfo/references/outputs.md` - were committed as one commit closing
+  the two numbered defects in issue #3, per Q6. That commit's body reads
+  `Closes #3`.
+- This phase therefore records the commit that satisfied it rather than
+  repeating it. See `notes.md` drift D1 and `solution_01.md`.
 
 ### Test Work - Phase 1
 
@@ -60,8 +64,8 @@ Requirements: REQ-1, REQ-2
 - `uv run ruff check src tests` - clean.
 - `npx pyright src/prinfo/exporter.py src/prinfo/cli.py` - 0 errors.
 - `npx markdownlint-cli2 "**/*.md" "#node_modules"` - clean.
-- `git status` shows a clean working tree for the six files above after the
-  commit.
+- `git status` shows a clean working tree for the six files above, and
+  `git log -1 --format=%H 2bedef1` resolves, confirming the commit is present.
 
 ## Phase 2: Shared severity helper
 

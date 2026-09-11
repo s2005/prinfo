@@ -19,8 +19,8 @@ uv run pytest -q
 ```
 
 Expected: all pass, 76 tests, since the commit-export fix (REQ-1, REQ-2) is
-already implemented and uncommitted on `fix/commit-skip-reasons-repro`.
-Record the count so the post-implementation run can be compared against it.
+already implemented and merged as commit `2bedef1`. Record the count so the
+post-implementation run can be compared against it.
 
 ### Linter Baseline
 
@@ -50,12 +50,13 @@ Expected: clean.
 ### Current Skip-Reason Shape
 
 ```bash
-git diff --stat main
+git show --stat 2bedef1
 ```
 
-Expected: shows the six files of the already-implemented commit-export fix
-as modified, and `docs/tasks/skip-reason-reporting/` as untracked. This is
-the before state for Phase 1.
+Expected: lists the six files of the commit-export fix, plus the six task
+documents, all committed together in `2bedef1`. The working tree is clean and
+`git diff --stat main` is empty, because Phase 1 is already merged. This is
+the before state for Phase 2.
 
 ## Post-Implementation Verification
 
@@ -70,12 +71,11 @@ uv run pytest -q
 uv run ruff check src tests
 npx pyright src/prinfo/exporter.py src/prinfo/cli.py
 npx markdownlint-cli2 "**/*.md" "#node_modules"
-git status
+git show --stat 2bedef1
 ```
 
-Expected: all four checks clean, and `git status` shows a clean working tree
-for the six committed files, with the commit closing the two numbered
-defects in issue #3.
+Expected: all four checks clean, and `2bedef1` contains the six files, with
+its body closing the two numbered defects in issue #3.
 
 #### Phase 2: Shared severity helper
 

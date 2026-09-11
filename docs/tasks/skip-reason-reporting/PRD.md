@@ -27,8 +27,9 @@ one that signals a real failure.
    (`src/prinfo/cli.py:167`) and `skipped_sources` (`:180`) share the same
    pattern and are "worth fixing once rather than three times."
 
-Items 1 and 2 are already implemented, tested and verified in the working
-tree on `fix/commit-skip-reasons-repro` (uncommitted): `commits-manifest.json`
+Items 1 and 2 are already implemented, tested, verified and merged. They
+shipped as commit `2bedef1`, "Explain skipped commit files and split their
+severity (#4)", whose body reads `Closes #3`: `commits-manifest.json`
 per-commit records now embed the full `skipped` array, and
 `ACTIONABLE_COMMIT_SKIP_REASONS = frozenset({"download_failed"})`
 (`src/prinfo/exporter.py:429`) drives a severity split in
@@ -88,8 +89,9 @@ non-zero, an INFO naming the benign count when non-zero.
 `export_pr_check_logs` currently logs both check-log skip reasons at WARNING
 (`src/prinfo/exporter.py:119` for `unsupported_check_type`, `:135` for
 `missing_log_content`). The `unsupported_check_type` per-item log moves to
-INFO, matching the treatment `removed` and `missing_path` already get in
-commit-file export (`src/prinfo/exporter.py:466`, INFO). The
+INFO, matching the treatment `removed` already gets in commit-file export
+(`src/prinfo/exporter.py:466`, INFO). `missing_path` records its skip without
+logging a per-item line at all (`src/prinfo/exporter.py:452-463`). The
 `missing_log_content` per-item log stays at WARNING, matching
 `download_failed` (`src/prinfo/exporter.py:483`, WARNING). This is a visible
 behaviour change: a run against a PR with only external CI checks no longer
@@ -112,11 +114,13 @@ No code change is made to `export_pr_comments` or to the `skipped_sources`
 summary branch in `src/prinfo/cli.py:181-185`. The finding - that all four
 comment-source call sites emit only `source_unavailable`, which always means
 a failed `gh` call, so every skip is actionable and the existing unconditional
-warning is already correct - is recorded in `analysis.md`. A test asserts
-that every `reason_code` produced by `export_pr_comments` across all four
-source failures is a member of the single-element actionable set
-`{"source_unavailable"}`, so the finding cannot silently rot if a future
-change adds a second comment-source reason code.
+warning is already correct - is recorded in `analysis.md`. A test drives each of the four
+sources through its failure path in turn and asserts that every `reason_code`
+`export_pr_comments` writes to `comments.json` is a member of the
+single-element actionable set `{"source_unavailable"}`, so the finding cannot
+silently rot if a future change adds a second comment-source reason code. One
+source fails per run rather than all four at once, because all four failing
+raises `ExportError` before a result exists; see `notes.md` drift D4.
 
 ### REQ-7: Documentation updated for check-log skip severity
 
@@ -165,10 +169,11 @@ commit-file skip-reason sections in both documents.
   `src/prinfo/cli.py` both call the same shared severity-logging function,
   verified by a test that patches the helper once and asserts it is invoked
   for both a commit-file result and a check-log result (REQ-5)
-- **AC-6** - a test drives `export_pr_comments` through all four source
-  failures and asserts every `reason_code` recorded in `skipped_sources` is
-  `"source_unavailable"`, the single actionable code, and that no code change
-  was made to `export_pr_comments` or its CLI summary branch (REQ-6)
+- **AC-6** - a test drives `export_pr_comments` through each of the four
+  source failures, one per run, and asserts every `reason_code` recorded in
+  the `skipped_sources` array of `comments.json` is `"source_unavailable"`,
+  the single actionable code, and that no code change was made to
+  `export_pr_comments` or its CLI summary branch (REQ-6)
 - **AC-7** - `README.md` and `skills/prinfo/references/outputs.md` document
   the check-log actionable and benign reason codes, the WARNING/INFO summary
   split, and the per-item log-level change, and `markdownlint-cli2` reports no

@@ -19,8 +19,8 @@ uv run pytest -q
 ```
 
 Expected: all pass, 76 tests, since the commit-export fix (REQ-1, REQ-2) is
-already implemented and uncommitted on `fix/commit-skip-reasons-repro`.
-Record the count so the post-implementation run can be compared against it.
+already implemented and merged as commit `2bedef1`. Record the count so the
+post-implementation run can be compared against it.
 
 ### Linter Baseline
 
@@ -50,12 +50,13 @@ Expected: clean.
 ### Current Skip-Reason Shape
 
 ```bash
-git diff --stat main
+git show --stat 2bedef1
 ```
 
-Expected: shows the six files of the already-implemented commit-export fix
-as modified, and `docs/tasks/skip-reason-reporting/` as untracked. This is
-the before state for Phase 1.
+Expected: lists the six files of the commit-export fix, plus the six task
+documents, all committed together in `2bedef1`. The working tree is clean and
+`git diff --stat main` is empty, because Phase 1 is already merged. This is
+the before state for Phase 2.
 
 ## Post-Implementation Verification
 
@@ -70,12 +71,11 @@ uv run pytest -q
 uv run ruff check src tests
 npx pyright src/prinfo/exporter.py src/prinfo/cli.py
 npx markdownlint-cli2 "**/*.md" "#node_modules"
-git status
+git show --stat 2bedef1
 ```
 
-Expected: all four checks clean, and `git status` shows a clean working tree
-for the six committed files, with the commit closing the two numbered
-defects in issue #3.
+Expected: all four checks clean, and `2bedef1` contains the six files, with
+its body closing the two numbered defects in issue #3.
 
 #### Phase 2: Shared severity helper
 
@@ -116,8 +116,8 @@ uv run pytest tests/test_exporter.py -k comments -q
 git diff src/prinfo/exporter.py src/prinfo/cli.py
 ```
 
-Expected: the guard test passes, asserting every `reason_code` recorded by
-`export_pr_comments` across all four failing sources is
+Expected: the guard test passes for each of the four sources in turn,
+asserting the `reason_code` `export_pr_comments` writes to `comments.json` is
 `"source_unavailable"`; the `git diff` against the end of Phase 3 is empty
 for both files, confirming REQ-6 added no production code.
 
@@ -182,6 +182,15 @@ line shows no WARNING when every skip is `unsupported_check_type`; a check
 whose log content is genuinely missing still logs at WARNING both per item
 and in the summary.
 
+Not run in this implementation run: it needs a live PR with a real external
+status check and authenticated `gh`. No acceptance criterion depends on it.
+The same three behaviours are asserted against the real code paths by
+`test_export_pr_check_logs_uses_info_for_unsupported_and_warning_for_missing_log`
+(per-item levels, AC-4),
+`test_main_does_not_warn_when_every_check_skip_is_benign` (no summary WARNING
+for an all-benign run, AC-3) and
+`test_main_warns_and_infos_for_mixed_check_log_skips` (AC-3).
+
 ## Final Acceptance Verification
 
 The feature can be accepted when all items are true:
@@ -196,29 +205,30 @@ The feature can be accepted when all items are true:
       `download_failed` count and one INFO naming the combined benign count
       - verified by: Phase 1 verification, the four pre-existing commit-file
       severity tests
-- [ ] AC-3 - a check-log export mixing `missing_log_content` with
+- [x] AC-3 - a check-log export mixing `missing_log_content` with
       `unsupported_check_type` skips produces one WARNING naming only the
       `missing_log_content` count and one INFO naming the
       `unsupported_check_type` count, and `ExportResult.skipped_check_reasons`
       reports the correct per-reason-code breakdown - verified by: Phase 3
       verification
-- [ ] AC-4 - a check with `unsupported_check_type` logs its per-item skip at
+- [x] AC-4 - a check with `unsupported_check_type` logs its per-item skip at
       INFO and a check with `missing_log_content` logs its per-item skip at
       WARNING - verified by: Phase 3 verification, the `caplog` tests
-- [ ] AC-5 - the commit-file and check-log summary branches in
+- [x] AC-5 - the commit-file and check-log summary branches in
       `src/prinfo/cli.py` both call the same shared severity-logging
       function - verified by: Phase 2 and Phase 3 verification
-- [ ] AC-6 - a test drives `export_pr_comments` through all four source
-      failures and asserts every `reason_code` recorded in `skipped_sources`
-      is `"source_unavailable"`, the single actionable code, with no
-      production code change made - verified by: Phase 4 verification
-- [ ] AC-7 - `README.md` and `skills/prinfo/references/outputs.md` document
+- [x] AC-6 - a test drives `export_pr_comments` through each of the four
+      source failures, one per run, and asserts every `reason_code` recorded
+      in the `skipped_sources` array of `comments.json` is
+      `"source_unavailable"`, the single actionable code, with no production
+      code change made - verified by: Phase 4 verification
+- [x] AC-7 - `README.md` and `skills/prinfo/references/outputs.md` document
       the check-log actionable and benign reason codes, the WARNING/INFO
       summary split, and the per-item log-level change, and
       `markdownlint-cli2` reports no findings on either file - verified by:
       Phase 5 verification
-- [ ] AC-8 - `uv run ruff check src tests` is clean on the finished branch,
+- [x] AC-8 - `uv run ruff check src tests` is clean on the finished branch,
       with no suppression directive added - verified by: Linter section
-- [ ] AC-9 - `uv run pytest -q` passes on the finished branch, with the test
+- [x] AC-9 - `uv run pytest -q` passes on the finished branch, with the test
       count higher than the pre-task baseline and no previously passing test
       removed or weakened - verified by: Regression Check section

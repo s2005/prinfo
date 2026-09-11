@@ -37,17 +37,21 @@ Requirements: REQ-1, REQ-2
 
 ### Implementation Work - Phase 1
 
-- No source change. The working tree on `fix/commit-skip-reasons-repro`
-  already carries the finished commit-export fix: `_CommitFolderResult`
-  embedding `skipped` into `commits-manifest.json` records (REQ-1),
-  `CommitExportResult.skipped_file_reasons`, `ACTIONABLE_COMMIT_SKIP_REASONS`
-  and the WARNING/INFO split in `src/prinfo/cli.py:195-207` (REQ-2), the four
-  supporting tests, and the doc updates for the commit-file skip-reason
-  sections in `README.md` and `skills/prinfo/references/outputs.md`.
-- Stage `src/prinfo/exporter.py`, `src/prinfo/cli.py`, `tests/test_exporter.py`,
-  `tests/test_cli.py`, `README.md` and `skills/prinfo/references/outputs.md`
-  and commit them as one commit closing the two numbered defects in issue #3,
-  per Q6.
+- No source change. Commit `2bedef1`, "Explain skipped commit files and split
+  their severity (#4)", already carries the finished commit-export fix:
+  `_CommitFolderResult` embedding `skipped` into `commits-manifest.json`
+  records (REQ-1), `CommitExportResult.skipped_file_reasons`,
+  `ACTIONABLE_COMMIT_SKIP_REASONS` and the WARNING/INFO split in
+  `src/prinfo/cli.py:195-212` (REQ-2), the four supporting tests, and the doc
+  updates for the commit-file skip-reason sections in `README.md` and
+  `skills/prinfo/references/outputs.md`.
+- The six files - `src/prinfo/exporter.py`, `src/prinfo/cli.py`,
+  `tests/test_exporter.py`, `tests/test_cli.py`, `README.md` and
+  `skills/prinfo/references/outputs.md` - were committed as one commit closing
+  the two numbered defects in issue #3, per Q6. That commit's body reads
+  `Closes #3`.
+- This phase therefore records the commit that satisfied it rather than
+  repeating it. See `notes.md` drift D1 and `solution_01.md`.
 
 ### Test Work - Phase 1
 
@@ -60,8 +64,8 @@ Requirements: REQ-1, REQ-2
 - `uv run ruff check src tests` - clean.
 - `npx pyright src/prinfo/exporter.py src/prinfo/cli.py` - 0 errors.
 - `npx markdownlint-cli2 "**/*.md" "#node_modules"` - clean.
-- `git status` shows a clean working tree for the six files above after the
-  commit.
+- `git status` shows a clean working tree for the six files above, and
+  `git log -1 --format=%H 2bedef1` resolves, confirming the commit is present.
 
 ## Phase 2: Shared severity helper
 
@@ -171,13 +175,20 @@ Requirements: REQ-6
 
 ### Test Work - Phase 4
 
-- `tests/test_exporter.py`: drive `export_pr_comments` with a fake `GhCli`
-  whose `list_pr_issue_comments`, `list_pr_review_comments`, `list_pr_reviews`
-  and `list_pr_review_threads` each raise `GhCliError`, and assert every
-  `reason_code` recorded in the result's `skipped_sources` equals
-  `"source_unavailable"`. This pins the finding: the test fails the moment a
+- `tests/test_exporter.py`: drive `export_pr_comments` once per comment source,
+  with a fake `GhCli` whose `list_pr_issue_comments`,
+  `list_pr_review_comments`, `list_pr_reviews` or `list_pr_review_threads`
+  raises `GhCliError` on that run, and assert the `skipped_sources` entry
+  written to `comments.json` carries `reason_code == "source_unavailable"` and
+  the expected `source`. This pins the finding: the test fails the moment a
   future change introduces a second comment-source reason code without also
   reopening this task's conclusion.
+- One source per call, rather than all four at once, because
+  `src/prinfo/exporter.py:253-254` raises `ExportError` when every source
+  fails, and because `CommentExportResult.skipped_sources` is a count rather
+  than a list of records - the reason codes live in `comments.json`. See
+  `notes.md` drift D4. The all-four-fail path is already covered by
+  `test_export_pr_comments_raises_when_every_source_fails`.
 
 ### Verification - Phase 4
 

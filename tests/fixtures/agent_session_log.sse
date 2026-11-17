@@ -1,0 +1,16 @@
+data: {"id": "c1", "choices": [{"index": 0, "delta": {"content": "I will review the change in src/app/example.py."}}]}
+
+data: {"id": "c2", "choices": [{"index": 0, "delta": {"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "view", "arguments": "{\"path\": \"src/app/example.py\"}"}}]}}]}
+
+data: {"id": "c3", "choices": [{"index": 0, "delta": {"tool_calls": [{"id": "call_2", "type": "function", "function": {"name": "rg", "arguments": "{\"pattern\": \"def compute\", \"path\": \"src\"}"}}]}}]}
+
+data: {"id": "c4", "choices": [{"index": 0, "delta": {"tool_calls": [{"id": "call_3", "type": "function", "function": {"name": "store_comment", "arguments": "{\"comment_type\": \"bug\", \"file_location\": \"src/app/example.py\", \"start_line\": 10, \"end_line\": 12, \"comment_content\": \"Division by zero when count is 0.\", \"fixed\": true, \"suggested_fix\": \"if count == 0:\\n    return 0\", \"confidence\": \"high\"}"}}]}}]}
+
+data: {not json
+
+data: {"id": "c5", "choices": [{"index": 0, "delta": {"content": "One more issue found."}}]}
+
+data: {"id": "c6", "choices": [{"index": 0, "delta": {"tool_calls": [{"id": "call_4", "type": "function", "function": {"name": "store_comment", "arguments": "{\"comment_type\": \"suggestion\", \"file_location\": \"src/app/example.py\", \"start_line\": 20, \"end_line\": 20, \"comment_content\": \"Consider renaming this helper.\", \"fixed\": false, \"fix_skip_reason\": \"needs_design\", \"fix_skip_note\": \"Rename affects public API.\"}"}}]}}]}
+
+event: done
+data: [DONE]

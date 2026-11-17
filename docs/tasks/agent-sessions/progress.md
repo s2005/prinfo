@@ -47,13 +47,13 @@ Requirements: REQ-3
 
 Requirements: REQ-5, REQ-4
 
-- [ ] `parse_session_log` with unparsed-event counting
-- [ ] `render_transcript` with argument truncation
-- [ ] Findings extraction from `store_comment` calls with `extra`
-- [ ] `curate_session_metadata` allow-list and `event_identifiers` decoding
-- [ ] Synthetic fixture `tests/fixtures/agent_session_log.sse`
-- [ ] `tests/test_session_log.py`
-- [ ] Phase 3 verification
+- [x] `parse_session_log` with unparsed-event counting
+- [x] `render_transcript` with argument truncation
+- [x] Findings extraction from `store_comment` calls with `extra`
+- [x] `curate_session_metadata` allow-list and `event_identifiers` decoding
+- [x] Synthetic fixture `tests/fixtures/agent_session_log.sse`
+- [x] `tests/test_session_log.py`
+- [x] Phase 3 verification
 
 ## Phase 4: Export mode
 

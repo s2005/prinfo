@@ -65,10 +65,10 @@
 
 ## Q10: Does the new option require a version bump?
 
-- **Why it matters**: The user's rules require a bump in the same change whenever input parameters change, for non-fork repositories owned by the `s2005` account.
+- **Why it matters**: The user's rules require a bump in the same change whenever input parameters change, for non-fork repositories owned by the user's own GitHub account.
 - **Options**: (a) minor bump `0.4.0` to `0.5.0` via `pyproject.toml` and `uv lock`; (b) patch bump.
 - **Recommended**: (a).
-- **Answer**: (a) - decided by reading `pyproject.toml:3`, the `origin` remote (owner `s2005`, no `upstream`) and `git config user.name`. An added option is an additive change, which bumps minor while the version is `0.x`.
+- **Answer**: (a) - decided by reading `pyproject.toml:3`, the `origin` remote (owned by the user's account, no `upstream`) and `git config user.name`. An added option is an additive change, which bumps minor while the version is `0.x`.
 
 ## Q11: Is review-thread resolution state already available for consumers?
 

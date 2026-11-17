@@ -1,14 +1,19 @@
+import email.message
 import json
+import logging
 import re
+import urllib.error
 from pathlib import Path
 
 import pytest
 
 from prinfo.config import AppConfig
+from prinfo.copilot import CopilotApiClient, CopilotApiError
 from prinfo.exporter import (
     ExportError,
     PrCommitCache,
     build_log_filename,
+    export_pr_agent_sessions,
     export_pr_check_logs,
     export_pr_comments,
     export_pr_commit_files,
@@ -1477,3 +1482,419 @@ def test_commit_export_result_tallies_skipped_files_by_reason_code(tmp_path: Pat
         "download_failed": 1,
         "missing_path": 1,
     }
+
+
+# --- agent sessions -------------------------------------------------------------
+
+FIXTURE_LOG = Path(__file__).parent / "fixtures" / "agent_session_log.sse"
+SENTINEL = "ghu_SENTINEL_TOKEN_123"
+
+
+class SessionFakeGhCli(FakeGhCli):
+    def __init__(self, *, token: str = "tok", **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.token = token
+        self.pr_id_calls: list[tuple[str, int]] = []
+        self.token_hosts: list[str | None] = []
+
+    def get_pull_request_id(self, repo: str, pr_number: int) -> int:
+        self.pr_id_calls.append((repo, pr_number))
+        return 777
+
+    def auth_token(self, host: str | None = None) -> str:
+        self.token_hosts.append(host)
+        return self.token
+
+
+def _api_error(status: int | None, path: str = "/x") -> CopilotApiError:
+    return CopilotApiError(method="GET", path=path, status=status, reason="boom")
+
+
+class FakeCopilotClient:
+    def __init__(
+        self,
+        *,
+        sessions: list[dict] | None = None,
+        metadata: dict[str, dict] | None = None,
+        logs: dict[str, bytes] | None = None,
+        errors: dict[tuple[str, str], Exception] | None = None,
+    ) -> None:
+        self.sessions = sessions or []
+        self.metadata = metadata or {}
+        self.logs = logs or {}
+        self.errors = errors or {}
+        self.calls: list[tuple[str, object]] = []
+
+    def _maybe_raise(self, call: str, key: str) -> None:
+        if (call, key) in self.errors:
+            raise self.errors[(call, key)]
+
+    def list_pr_sessions(self, pr_database_id: int) -> list[dict]:
+        self.calls.append(("list", pr_database_id))
+        self._maybe_raise("list", "")
+        return list(self.sessions)
+
+    def get_session(self, session_id: str) -> dict:
+        self.calls.append(("meta", session_id))
+        self._maybe_raise("meta", session_id)
+        return self.metadata.get(session_id, {"id": session_id})
+
+    def get_session_log(self, session_id: str) -> bytes:
+        self.calls.append(("log", session_id))
+        self._maybe_raise("log", session_id)
+        return self.logs.get(session_id, b"")
+
+
+class FactoryRecorder:
+    def __init__(self, client: object) -> None:
+        self.client = client
+        self.calls: list[tuple[str, object]] = []
+
+    def __call__(self, base_url: str, token_provider):
+        self.calls.append((base_url, token_provider))
+        return self.client
+
+
+def _session_config(
+    tmp_path: Path, repo: str = "octo/repo", gh_host: str = "github.com"
+) -> AppConfig:
+    return AppConfig(
+        pr_number=42,
+        repo=repo,
+        output_dir=tmp_path / "output",
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=True,
+        skip_check_logs=True,
+        env_file=None,
+        gh_host=gh_host,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level="INFO",
+    )
+
+
+def _read_manifest(result) -> dict:
+    return json.loads(result.manifest_path.read_text(encoding="utf-8"))
+
+
+def test_agent_sessions_exported_in_created_at_order(tmp_path: Path) -> None:
+    log = FIXTURE_LOG.read_bytes()
+    client = FakeCopilotClient(
+        sessions=[
+            {"id": "s-late", "created_at": "2026-02-01T00:00:00Z"},
+            {"id": "s-early", "created_at": "2026-01-01T00:00:00Z"},
+        ],
+        logs={"s-late": log, "s-early": log},
+    )
+    factory = FactoryRecorder(client)
+    gh = SessionFakeGhCli()
+
+    result = export_pr_agent_sessions(_session_config(tmp_path), gh, factory)
+
+    manifest = _read_manifest(result)
+    assert [item["id"] for item in manifest["sessions"]] == ["s-early", "s-late"]
+    assert list(manifest) == [
+        "repo",
+        "pr_number",
+        "copilot_api_host",
+        "mode_skip",
+        "sessions",
+        "skipped_sessions",
+        "counts",
+    ]
+    assert manifest["counts"] == {"listed": 2, "exported": 2, "skipped": 0, "findings": 4}
+    assert manifest["copilot_api_host"] == "api.githubcopilot.com"
+    assert result.output_dir == tmp_path / "output" / "agent-sessions"
+    for sid in ("s-early", "s-late"):
+        for name in ("session.json", "log.sse", "transcript.md"):
+            assert (result.output_dir / sid / name).is_file()
+    assert gh.pr_id_calls == [("octo/repo", 42)]
+    assert factory.calls[0][0] == "https://api.githubcopilot.com"
+    assert factory.calls[0][1]() == "tok"
+    assert gh.token_hosts == ["github.com"]
+    assert result.exported_sessions == 2
+    assert result.findings_count == 4
+
+
+def test_agent_sessions_empty_list(tmp_path: Path) -> None:
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(FakeCopilotClient())
+    )
+
+    manifest = _read_manifest(result)
+    assert manifest["sessions"] == []
+    assert manifest["mode_skip"] is None
+    assert result.exported_sessions == 0
+    assert result.skipped_sessions == 0
+
+
+def test_agent_sessions_unsupported_host_makes_no_calls(tmp_path: Path) -> None:
+    factory = FactoryRecorder(FakeCopilotClient())
+    gh = SessionFakeGhCli()
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path, repo="github.example.com/o/r"), gh, factory
+    )
+
+    manifest = _read_manifest(result)
+    assert manifest["mode_skip"]["reason_code"] == "unsupported_host"
+    assert manifest["copilot_api_host"] is None
+    assert result.mode_skip_reason_code == "unsupported_host"
+    assert factory.calls == []
+    assert gh.pr_id_calls == []
+
+
+def test_agent_sessions_ghe_cloud_host_comes_from_repo_not_gh_host(tmp_path: Path) -> None:
+    factory = FactoryRecorder(FakeCopilotClient())
+    gh = SessionFakeGhCli()
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path, repo="tenant.ghe.com/o/r", gh_host="github.com"), gh, factory
+    )
+
+    assert factory.calls[0][0] == "https://copilot-api.tenant.ghe.com"
+    assert result.copilot_api_host == "copilot-api.tenant.ghe.com"
+    factory.calls[0][1]()
+    assert gh.token_hosts == ["tenant.ghe.com"]
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(401, "no_copilot_access"), (403, "no_copilot_access"), (404, "no_sessions_endpoint")],
+)
+def test_agent_sessions_discovery_status_becomes_mode_skip(
+    tmp_path: Path, status: int, code: str
+) -> None:
+    client = FakeCopilotClient(errors={("list", ""): _api_error(status)})
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    manifest = _read_manifest(result)
+    assert manifest["mode_skip"]["reason_code"] == code
+    assert result.mode_skip_reason_code == code
+    assert manifest["sessions"] == []
+
+
+def test_agent_sessions_other_discovery_error_raises(tmp_path: Path) -> None:
+    client = FakeCopilotClient(errors={("list", ""): _api_error(500)})
+
+    with pytest.raises(ExportError, match="Could not list Copilot agent sessions for PR #42"):
+        export_pr_agent_sessions(
+            _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+        )
+
+
+def test_agent_sessions_log_failure_skips_only_that_session(tmp_path: Path) -> None:
+    log = FIXTURE_LOG.read_bytes()
+    client = FakeCopilotClient(
+        sessions=[
+            {"id": "bad", "created_at": "1"},
+            {"id": "good", "created_at": "2"},
+        ],
+        logs={"good": log},
+        errors={("log", "bad"): _api_error(500)},
+    )
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    manifest = _read_manifest(result)
+    assert [item["id"] for item in manifest["sessions"]] == ["good"]
+    assert [(i["session_id"], i["reason_code"]) for i in manifest["skipped_sessions"]] == [
+        ("bad", "log_unavailable")
+    ]
+    assert result.skipped_session_reasons == {"log_unavailable": 1}
+    assert not (result.output_dir / "bad").exists()
+
+
+def test_agent_sessions_metadata_failure_is_skipped(tmp_path: Path) -> None:
+    client = FakeCopilotClient(
+        sessions=[{"id": "bad"}, {"id": "good"}],
+        errors={("meta", "bad"): _api_error(500)},
+    )
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    manifest = _read_manifest(result)
+    assert manifest["skipped_sessions"][0]["reason_code"] == "metadata_unavailable"
+    assert ("log", "bad") not in client.calls
+    assert result.exported_sessions == 1
+
+
+def test_agent_sessions_invalid_id_is_skipped_without_writing_outside(tmp_path: Path) -> None:
+    client = FakeCopilotClient(sessions=[{"id": "../evil"}, {"id": "ok"}])
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    manifest = _read_manifest(result)
+    assert manifest["skipped_sessions"] == [
+        {
+            "session_id": None,
+            "reason_code": "invalid_session_id",
+            "reason": "Session id cannot be used as a folder name.",
+        }
+    ]
+    assert not (tmp_path / "output" / "evil").exists()
+    assert ("meta", "../evil") not in client.calls
+    assert result.exported_sessions == 1
+
+
+def test_agent_sessions_all_failing_raises_but_writes_manifest(tmp_path: Path) -> None:
+    client = FakeCopilotClient(
+        sessions=[{"id": "a"}, {"id": "b"}],
+        errors={("log", "a"): _api_error(500), ("meta", "b"): _api_error(502)},
+    )
+    config = _session_config(tmp_path)
+
+    with pytest.raises(ExportError, match="could be exported"):
+        export_pr_agent_sessions(config, SessionFakeGhCli(), FactoryRecorder(client))
+
+    manifest = json.loads(
+        (config.output_dir / "agent-sessions" / "agent-sessions.json").read_text(encoding="utf-8")
+    )
+    assert {item["reason_code"] for item in manifest["skipped_sessions"]} == {
+        "log_unavailable",
+        "metadata_unavailable",
+    }
+
+
+def test_agent_sessions_log_is_byte_identical_and_findings_written(tmp_path: Path) -> None:
+    log = FIXTURE_LOG.read_bytes()
+    client = FakeCopilotClient(sessions=[{"id": "s1"}], logs={"s1": log})
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    folder = result.output_dir / "s1"
+    assert (folder / "log.sse").read_bytes() == log
+    findings = json.loads((folder / "findings.json").read_text(encoding="utf-8"))
+    assert findings["session_id"] == "s1"
+    assert len(findings["findings"]) == 2
+    record = _read_manifest(result)["sessions"][0]
+    assert record["files"]["findings"] == "s1/findings.json"
+    assert record["findings_count"] == 2
+    assert record["log_bytes"] == len(log)
+
+
+def test_agent_sessions_without_findings_writes_no_findings_file(tmp_path: Path) -> None:
+    log = b'data: {"id": "c1", "choices": [{"index": 0, "delta": {"content": "hello"}}]}\n\n'
+    client = FakeCopilotClient(sessions=[{"id": "s1"}], logs={"s1": log})
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    assert not (result.output_dir / "s1" / "findings.json").exists()
+    record = _read_manifest(result)["sessions"][0]
+    assert record["files"]["findings"] is None
+    assert record["findings_count"] == 0
+
+
+def test_agent_sessions_json_holds_curated_keys_only(tmp_path: Path) -> None:
+    planted = "planted-login-value"
+    identifier = "review:" + json.dumps({"review_pass": 2, "user_login": planted})
+    client = FakeCopilotClient(
+        sessions=[{"id": "s1"}],
+        metadata={
+            "s1": {
+                "id": "s1",
+                "state": "completed",
+                "user_login": planted,
+                "user_id": 987654,
+                "request_id": "req-planted",
+                "access_type": "access-planted",
+                "settings": {"secret": "settings-planted"},
+                "event_identifiers": [identifier],
+            }
+        },
+        logs={"s1": FIXTURE_LOG.read_bytes()},
+    )
+
+    result = export_pr_agent_sessions(
+        _session_config(tmp_path), SessionFakeGhCli(), FactoryRecorder(client)
+    )
+
+    texts = [
+        result.manifest_path.read_text(encoding="utf-8"),
+        (result.output_dir / "s1" / "session.json").read_text(encoding="utf-8"),
+    ]
+    for text in texts:
+        for banned in (
+            "user_login",
+            "user_id",
+            "request_id",
+            "access_type",
+            "settings",
+            "event_identifiers",
+            planted,
+            "987654",
+            "req-planted",
+            "access-planted",
+            "settings-planted",
+        ):
+            assert banned not in text
+    assert json.loads(texts[1])["review_pass"] == 2
+
+
+class _Resp:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> "_Resp":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def test_agent_sessions_token_never_reaches_logs_reasons_or_files(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    log = FIXTURE_LOG.read_bytes()
+    list_body = json.dumps(
+        {"sessions": [{"id": "bad", "created_at": "1"}, {"id": "good", "created_at": "2"}]}
+    ).encode()
+
+    def opener(request, timeout=None):
+        url = request.full_url
+        if url.endswith("/agents/sessions/resource/pull/777"):
+            return _Resp(list_body)
+        if url.endswith("/agents/sessions/bad/logs"):
+            raise urllib.error.HTTPError(url, 500, "msg", hdrs=email.message.Message(), fp=None)
+        if url.endswith("/logs"):
+            return _Resp(log)
+        sid = url.rsplit("/", 1)[1]
+        return _Resp(json.dumps({"id": sid, "state": "completed"}).encode())
+
+    def factory(base_url: str, token_provider):
+        return CopilotApiClient(base_url=base_url, token_provider=token_provider, opener=opener)
+
+    config = _session_config(tmp_path)
+    result = export_pr_agent_sessions(config, SessionFakeGhCli(token=SENTINEL), factory)
+
+    assert result.exported_sessions == 1
+    reasons = [item["reason"] for item in _read_manifest(result)["skipped_sessions"]]
+    assert reasons and all(SENTINEL not in reason for reason in reasons)
+    for record in caplog.records:
+        assert SENTINEL not in record.getMessage()
+        assert SENTINEL not in str(record.args)
+    sentinel = SENTINEL.encode()
+    files = [path for path in config.output_dir.rglob("*") if path.is_file()]
+    assert files
+    for path in files:
+        assert sentinel not in path.read_bytes()

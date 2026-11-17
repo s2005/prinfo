@@ -8,6 +8,7 @@ from prinfo.cli import _log_skip_severity, build_parser, main
 from prinfo.exporter import (
     ACTIONABLE_CHECK_SKIP_REASONS,
     ACTIONABLE_COMMIT_SKIP_REASONS,
+    AgentSessionExportResult,
     CommitExportResult,
     ExportError,
     ExportResult,
@@ -109,6 +110,7 @@ def test_main_skips_check_log_export_when_requested(monkeypatch: pytest.MonkeyPa
             "export_commit_files": True,
             "export_comments": False,
             "export_commit_log": False,
+            "export_agent_sessions": False,
             "skip_check_logs": True,
         },
     )()
@@ -156,6 +158,7 @@ def _make_config(**overrides) -> object:
         "export_commit_files": False,
         "export_comments": False,
         "export_commit_log": False,
+        "export_agent_sessions": False,
         "skip_check_logs": True,
     }
     base.update(overrides)
@@ -670,3 +673,124 @@ def test_both_summary_branches_call_one_shared_severity_helper(
     # Patching the one helper intercepts both summary branches, which is what proves
     # the check-log and commit-file splits share a single implementation.
     assert calls == [ACTIONABLE_CHECK_SKIP_REASONS, ACTIONABLE_COMMIT_SKIP_REASONS]
+
+
+def _sessions_result(**overrides) -> AgentSessionExportResult:
+    values = {
+        "repo": "octo/repo",
+        "pr_number": 1,
+        "output_dir": Path("out/agent-sessions"),
+        "manifest_path": Path("out/agent-sessions/agent-sessions.json"),
+        "copilot_api_host": "api.githubcopilot.com",
+        "exported_sessions": 0,
+        "skipped_sessions": 0,
+        "findings_count": 0,
+    }
+    values.update(overrides)
+    return AgentSessionExportResult(**values)
+
+
+def _run_sessions_mode(monkeypatch: pytest.MonkeyPatch, fake_export) -> int:
+    config = _make_config(export_agent_sessions=True)
+    monkeypatch.setattr("prinfo.cli.resolve_config", lambda args: config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_agent_sessions", fake_export)
+    return main(["--pr", "1", "--export-agent-sessions"])
+
+
+def test_main_runs_agent_sessions_mode_when_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_export(config_arg, gh_arg):
+        calls.append("sessions")
+        return _sessions_result(exported_sessions=1, findings_count=2)
+
+    assert _run_sessions_mode(monkeypatch, fake_export) == 0
+    assert calls == ["sessions"]
+
+
+def test_main_agent_sessions_failure_does_not_stop_comments(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = _make_config(export_agent_sessions=True, export_comments=True)
+    calls: list[str] = []
+
+    def fake_sessions(config_arg, gh_arg):
+        calls.append("sessions")
+        raise ExportError("sessions boom")
+
+    def fake_comments(config_arg, gh_arg):
+        calls.append("comments")
+        return type(
+            "CommentResult",
+            (),
+            {
+                "issue_comment_count": 0,
+                "review_comment_count": 0,
+                "review_count": 0,
+                "review_thread_count": 0,
+                "pr_number": 1,
+                "repo": "octo/repo",
+                "output_dir": "out",
+                "skipped_sources": 0,
+            },
+        )()
+
+    monkeypatch.setattr("prinfo.cli.resolve_config", lambda args: config)
+    monkeypatch.setattr("prinfo.cli.configure_logging", lambda log_level: None)
+    monkeypatch.setattr("prinfo.cli.GhCli", DummyGhCli)
+    monkeypatch.setattr("prinfo.cli.export_pr_agent_sessions", fake_sessions)
+    monkeypatch.setattr("prinfo.cli.export_pr_comments", fake_comments)
+
+    with caplog.at_level(logging.WARNING):
+        exit_code = main(["--pr", "1", "--export-agent-sessions", "--export-comments"])
+
+    assert exit_code == 0
+    assert set(calls) == {"sessions", "comments"}
+    assert "sessions boom" in caplog.text
+
+
+@pytest.mark.parametrize("code", ["unsupported_host", "no_copilot_access", "no_sessions_endpoint"])
+def test_main_warns_when_agent_sessions_mode_is_skipped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, code: str
+) -> None:
+    with caplog.at_level(logging.INFO):
+        exit_code = _run_sessions_mode(
+            monkeypatch, lambda c, g: _sessions_result(mode_skip_reason_code=code)
+        )
+
+    assert exit_code == 0
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert code in warnings[0].getMessage()
+
+
+def test_main_logs_empty_agent_session_list_at_info(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO):
+        _run_sessions_mode(monkeypatch, lambda c, g: _sessions_result())
+
+    assert "No Copilot agent sessions were found for PR #1." in caplog.text
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_main_warns_only_for_actionable_agent_session_skips(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    result = _sessions_result(
+        exported_sessions=1,
+        skipped_sessions=3,
+        skipped_session_reasons={"log_unavailable": 2, "invalid_session_id": 1},
+    )
+
+    with caplog.at_level(logging.INFO):
+        _run_sessions_mode(monkeypatch, lambda c, g: result)
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    infos = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert warnings == ["2 agent session(s) could not be downloaded."]
+    assert any("1 agent session(s) have an id" in message for message in infos)

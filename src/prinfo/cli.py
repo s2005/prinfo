@@ -11,18 +11,24 @@ from prinfo.config import ConfigurationError, resolve_config
 from prinfo.exporter import (
     ACTIONABLE_CHECK_SKIP_REASONS,
     ACTIONABLE_COMMIT_SKIP_REASONS,
+    ACTIONABLE_SESSION_SKIP_REASONS,
+    AgentSessionExportResult,
     CommentExportResult,
     CommitExportResult,
     CommitLogExportResult,
     ExportError,
     ExportResult,
     PrCommitCache,
+    export_pr_agent_sessions,
     export_pr_check_logs,
     export_pr_comments,
     export_pr_commit_files,
     export_pr_commit_log,
 )
 from prinfo.gh import GhCli, GhCliError
+
+
+_SESSION_MODE_SKIP_CODES = frozenset({"unsupported_host", "no_copilot_access", "no_sessions_endpoint"})
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             modes.append(
                 ("commit log", lambda: export_pr_commit_log(config, gh, commits_cache))
             )
+        if config.export_agent_sessions:
+            modes.append(("agent sessions", lambda: export_pr_agent_sessions(config, gh)))
 
         runs: list[_ModeRun] = []
         for name, run_mode in modes:
@@ -226,6 +234,36 @@ def _log_mode_summaries(runs: list[_ModeRun]) -> None:
                 result.pr_number,
                 result.repo,
                 result.output_dir,
+            )
+        elif isinstance(result, AgentSessionExportResult):
+            if result.mode_skip_reason_code in _SESSION_MODE_SKIP_CODES:
+                logger.warning(
+                    "Agent session export was skipped for PR #%s in %s: %s",
+                    result.pr_number,
+                    result.repo,
+                    result.mode_skip_reason_code,
+                )
+                continue
+            logger.info(
+                "Exported %s agent session(s) with %s finding(s) for PR #%s in %s to %s",
+                result.exported_sessions,
+                result.findings_count,
+                result.pr_number,
+                result.repo,
+                result.output_dir,
+            )
+            if not result.exported_sessions and not result.skipped_sessions:
+                logger.info("No Copilot agent sessions were found for PR #%s.", result.pr_number)
+            _log_skip_severity(
+                logger,
+                total=result.skipped_sessions,
+                breakdown=result.skipped_session_reasons,
+                actionable_reasons=ACTIONABLE_SESSION_SKIP_REASONS,
+                actionable_message="%s agent session(s) could not be downloaded.",
+                benign_message=(
+                    "%s agent session(s) have an id that cannot be used as a folder "
+                    "name and were skipped."
+                ),
             )
         elif run.error is not None:
             if run.name == "check logs":

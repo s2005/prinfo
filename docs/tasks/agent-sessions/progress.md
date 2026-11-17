@@ -59,12 +59,12 @@ Requirements: REQ-5, REQ-4
 
 Requirements: REQ-2, REQ-4, REQ-6, REQ-3
 
-- [ ] `AgentSessionExportResult`
-- [ ] `export_pr_agent_sessions` with host, access and per-session skips
-- [ ] Register the mode in `main` and extend `_log_mode_summaries`
-- [ ] Exporter tests including the sentinel-token scan
-- [ ] CLI failure-isolation test
-- [ ] Phase 4 verification
+- [x] `AgentSessionExportResult` (extra fields, see `notes.md` D4)
+- [x] `export_pr_agent_sessions` with host, access and per-session skips (`mode_skip` key and repo-host mapping, see `notes.md` D2, D3, D5)
+- [x] Register the mode in `main` and extend `_log_mode_summaries`
+- [x] Exporter tests including the sentinel-token scan
+- [x] CLI failure-isolation test
+- [x] Phase 4 verification
 
 ## Phase 5: Documentation and manual check
 

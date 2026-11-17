@@ -5,11 +5,14 @@ import json
 import logging
 import re
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Protocol
+from urllib.parse import urlsplit
 
 from prinfo.config import AppConfig
+from prinfo.copilot import CopilotApiClient, CopilotApiError, copilot_api_base_url
 from prinfo.gh import (
     CheckRun,
     CommitDetails,
@@ -23,9 +26,11 @@ from prinfo.gh import (
     ReviewThread,
     parse_repo_ref,
 )
+from prinfo.session_log import curate_session_metadata, parse_session_log, render_transcript
 
 LOGGER = logging.getLogger(__name__)
 FILENAME_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+SESSION_ID_RE = re.compile(r"^[A-Za-z0-9-]+$")
 
 
 class ExportError(RuntimeError):
@@ -97,6 +102,20 @@ class CommentExportResult:
     review_count: int
     review_thread_count: int
     skipped_sources: int
+
+
+@dataclass(frozen=True)
+class AgentSessionExportResult:
+    repo: str
+    pr_number: int
+    output_dir: Path
+    manifest_path: Path
+    copilot_api_host: str | None
+    exported_sessions: int
+    skipped_sessions: int
+    findings_count: int
+    skipped_session_reasons: Mapping[str, int] = field(default_factory=dict)
+    mode_skip_reason_code: str | None = None
 
 
 def export_pr_check_logs(config: AppConfig, gh: GhCli) -> ExportResult:
@@ -439,6 +458,11 @@ ACTIONABLE_COMMIT_SKIP_REASONS = frozenset({"download_failed"})
 # should have.
 ACTIONABLE_CHECK_SKIP_REASONS = frozenset({"missing_log_content"})
 
+# Reason codes a caller should act on. "invalid_session_id" describes a session whose
+# id cannot be used as a folder name and needs no action; "metadata_unavailable" and
+# "log_unavailable" mean the Copilot API failed to serve a session that was listed.
+ACTIONABLE_SESSION_SKIP_REASONS = frozenset({"metadata_unavailable", "log_unavailable"})
+
 
 @dataclass(frozen=True)
 class _CommitFolderResult:
@@ -707,3 +731,218 @@ def _empty_log_reason(*, check: CheckRun) -> str:
     if (check.conclusion or "").lower() == "skipped":
         return "job concluded skipped and produced no log output"
     return "job log endpoint returned no content"
+
+
+class _SessionClient(Protocol):
+    def list_pr_sessions(self, pr_database_id: int) -> list[dict]: ...
+
+    def get_session(self, session_id: str) -> dict: ...
+
+    def get_session_log(self, session_id: str) -> bytes: ...
+
+
+def export_pr_agent_sessions(
+    config: AppConfig,
+    gh: GhCli,
+    client_factory: Callable[[str, Callable[[], str]], _SessionClient] | None = None,
+) -> AgentSessionExportResult:
+    gh.ensure_available()
+
+    repo_name = config.repo or gh.detect_repo()
+    repo_ref = parse_repo_ref(repo_name, config.gh_host)
+
+    base_url = copilot_api_base_url(repo_ref.host)
+    api_host = urlsplit(base_url).hostname if base_url else None
+
+    sessions_dir = config.output_dir / "agent-sessions"
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    def finish(
+        *,
+        listed: int,
+        sessions: list[dict[str, object]],
+        skipped: list[dict[str, object]],
+        findings_count: int,
+        mode_skip: tuple[str, str] | None,
+    ) -> AgentSessionExportResult:
+        manifest_path = _write_agent_sessions_manifest(
+            sessions_dir=sessions_dir,
+            repo=repo_ref.full_name,
+            pr_number=config.pr_number,
+            copilot_api_host=api_host,
+            mode_skip=mode_skip,
+            sessions=sessions,
+            skipped=skipped,
+            listed=listed,
+            findings_count=findings_count,
+        )
+        return AgentSessionExportResult(
+            repo=repo_ref.full_name,
+            pr_number=config.pr_number,
+            output_dir=sessions_dir,
+            manifest_path=manifest_path,
+            copilot_api_host=api_host,
+            exported_sessions=len(sessions),
+            skipped_sessions=len(skipped),
+            findings_count=findings_count,
+            skipped_session_reasons=dict(Counter(str(item["reason_code"]) for item in skipped)),
+            mode_skip_reason_code=mode_skip[0] if mode_skip else None,
+        )
+
+    if base_url is None:
+        return finish(
+            listed=0,
+            sessions=[],
+            skipped=[],
+            findings_count=0,
+            mode_skip=(
+                "unsupported_host",
+                f"Copilot agent sessions are not available for host {repo_ref.host}.",
+            ),
+        )
+
+    pr_id = gh.get_pull_request_id(repo_ref.full_name, config.pr_number)
+    factory = client_factory or _default_copilot_client
+    client = factory(base_url, lambda: gh.auth_token(repo_ref.host))
+    try:
+        listed_sessions = client.list_pr_sessions(pr_id)
+    except CopilotApiError as exc:
+        if exc.status in (401, 403):
+            code = "no_copilot_access"
+        elif exc.status == 404:
+            code = "no_sessions_endpoint"
+        else:
+            raise ExportError(
+                f"Could not list Copilot agent sessions for PR #{config.pr_number} in "
+                f"{repo_ref.full_name}: {exc}"
+            ) from exc
+        return finish(
+            listed=0, sessions=[], skipped=[], findings_count=0, mode_skip=(code, str(exc))
+        )
+
+    listed_sessions = sorted(
+        listed_sessions,
+        key=lambda entry: (str(entry.get("created_at") or ""), str(entry.get("id") or "")),
+    )
+    exported: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    findings_total = 0
+    for entry in listed_sessions:
+        session_id = str(entry.get("id") or "")
+        if not SESSION_ID_RE.match(session_id):
+            skipped.append(
+                {
+                    "session_id": None,
+                    "reason_code": "invalid_session_id",
+                    "reason": "Session id cannot be used as a folder name.",
+                }
+            )
+            continue
+        try:
+            metadata = client.get_session(session_id)
+        except CopilotApiError as exc:
+            LOGGER.warning("Skipping agent session %s: %s", session_id, exc)
+            skipped.append(_skipped_session_record(session_id, "metadata_unavailable", exc))
+            continue
+        try:
+            raw_log = client.get_session_log(session_id)
+        except CopilotApiError as exc:
+            LOGGER.warning("Skipping agent session %s: %s", session_id, exc)
+            skipped.append(_skipped_session_record(session_id, "log_unavailable", exc))
+            continue
+
+        record, session_findings = _write_session_folder(
+            sessions_dir, session_id, metadata, raw_log
+        )
+        findings_total += session_findings
+        exported.append(record)
+
+    result = finish(
+        listed=len(listed_sessions),
+        sessions=exported,
+        skipped=skipped,
+        findings_count=findings_total,
+        mode_skip=None,
+    )
+    if listed_sessions and not exported:
+        raise ExportError(
+            f"None of the {len(listed_sessions)} Copilot agent session(s) for PR "
+            f"#{config.pr_number} in {repo_ref.full_name} could be exported; "
+            f"see {result.manifest_path} for the reasons."
+        )
+    return result
+
+
+def _default_copilot_client(base_url: str, token_provider: Callable[[], str]) -> _SessionClient:
+    return CopilotApiClient(base_url=base_url, token_provider=token_provider)
+
+
+def _skipped_session_record(
+    session_id: str, reason_code: str, exc: Exception
+) -> dict[str, object]:
+    return {"session_id": session_id, "reason_code": reason_code, "reason": str(exc)}
+
+
+def _write_session_folder(
+    sessions_dir: Path, session_id: str, metadata: dict, raw_log: bytes
+) -> tuple[dict[str, object], int]:
+    curated = curate_session_metadata(metadata)
+    folder = sessions_dir / session_id
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "session.json").write_text(json.dumps(curated, indent=2), encoding="utf-8")
+    (folder / "log.sse").write_bytes(raw_log)
+    parsed = parse_session_log(raw_log)
+    (folder / "transcript.md").write_text(
+        render_transcript(parsed, session_id=session_id), encoding="utf-8"
+    )
+    findings_file: str | None = None
+    if parsed.findings:
+        (folder / "findings.json").write_text(
+            json.dumps({"session_id": session_id, "findings": parsed.findings}, indent=2),
+            encoding="utf-8",
+        )
+        findings_file = f"{session_id}/findings.json"
+    record: dict[str, object] = dict(curated)
+    record["files"] = {
+        "session": f"{session_id}/session.json",
+        "log": f"{session_id}/log.sse",
+        "transcript": f"{session_id}/transcript.md",
+        "findings": findings_file,
+    }
+    record["findings_count"] = len(parsed.findings)
+    record["unparsed_events"] = parsed.unparsed_events
+    record["log_bytes"] = len(raw_log)
+    return record, len(parsed.findings)
+
+
+def _write_agent_sessions_manifest(
+    *,
+    sessions_dir: Path,
+    repo: str,
+    pr_number: int,
+    copilot_api_host: str | None,
+    mode_skip: tuple[str, str] | None,
+    sessions: list[dict[str, object]],
+    skipped: list[dict[str, object]],
+    listed: int,
+    findings_count: int,
+) -> Path:
+    manifest = {
+        "repo": repo,
+        "pr_number": pr_number,
+        "copilot_api_host": copilot_api_host,
+        "mode_skip": (
+            {"reason_code": mode_skip[0], "reason": mode_skip[1]} if mode_skip else None
+        ),
+        "sessions": sessions,
+        "skipped_sessions": skipped,
+        "counts": {
+            "listed": listed,
+            "exported": len(sessions),
+            "skipped": len(skipped),
+            "findings": findings_count,
+        },
+    }
+    manifest_path = sessions_dir / "agent-sessions.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest_path

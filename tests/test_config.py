@@ -409,3 +409,125 @@ def test_resolve_config_requires_commit_export_when_skipping_check_logs() -> Non
     assert "PRINFO_EXPORT_COMMIT_FILES" in message
     assert "PRINFO_EXPORT_COMMENTS" in message
     assert "PRINFO_EXPORT_COMMIT_LOG" in message
+
+
+def test_resolve_config_enables_agent_sessions_from_cli_flag() -> None:
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=None,
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=True,
+        skip_check_logs=False,
+        env_file=None,
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args, environ={})
+
+    assert config.export_agent_sessions is True
+
+
+def test_resolve_config_enables_agent_sessions_from_env_file(tmp_path: Path) -> None:
+    env_file = tmp_path / "some.env"
+    env_file.write_text("PRINFO_EXPORT_AGENT_SESSIONS=true", encoding="utf-8")
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=None,
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=False,
+        skip_check_logs=False,
+        env_file=str(env_file),
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args)
+
+    assert config.export_agent_sessions is True
+
+
+def test_resolve_config_prefers_cli_agent_sessions_flag_over_env_false(tmp_path: Path) -> None:
+    env_file = tmp_path / "some.env"
+    env_file.write_text("PRINFO_EXPORT_AGENT_SESSIONS=false", encoding="utf-8")
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=None,
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=True,
+        skip_check_logs=False,
+        env_file=str(env_file),
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args)
+
+    assert config.export_agent_sessions is True
+
+
+def test_resolve_config_accepts_skip_check_logs_with_agent_sessions_export() -> None:
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=None,
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=True,
+        skip_check_logs=True,
+        env_file=None,
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    config = resolve_config(args, environ={})
+
+    assert config.skip_check_logs is True
+
+
+def test_resolve_config_skip_check_logs_error_mentions_agent_sessions() -> None:
+    args = Namespace(
+        pr=15,
+        repo=None,
+        output_dir=None,
+        skip_empty_logs=False,
+        export_commit_files=False,
+        export_comments=False,
+        export_commit_log=False,
+        export_agent_sessions=False,
+        skip_check_logs=True,
+        env_file=None,
+        gh_host=None,
+        gh_token=None,
+        gh_config_dir=None,
+        log_level=None,
+    )
+
+    with pytest.raises(ConfigurationError) as excinfo:
+        resolve_config(args, environ={})
+
+    message = str(excinfo.value)
+    assert "--export-agent-sessions" in message
+    assert "PRINFO_EXPORT_AGENT_SESSIONS" in message

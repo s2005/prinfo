@@ -23,6 +23,7 @@ class AppConfig:
     export_commit_files: bool
     export_comments: bool
     export_commit_log: bool
+    export_agent_sessions: bool
     skip_check_logs: bool
     env_file: Path | None
     gh_host: str
@@ -56,15 +57,22 @@ def resolve_config(args, environ: Mapping[str, str] | None = None) -> AppConfig:
         cli_value=getattr(args, "export_commit_log", False),
         env_value=env_values.get("PRINFO_EXPORT_COMMIT_LOG"),
     )
+    export_agent_sessions = _resolve_bool(
+        cli_value=getattr(args, "export_agent_sessions", False),
+        env_value=env_values.get("PRINFO_EXPORT_AGENT_SESSIONS"),
+    )
     skip_check_logs = _resolve_bool(
         cli_value=getattr(args, "skip_check_logs", False),
         env_value=env_values.get("PRINFO_SKIP_CHECK_LOGS"),
     )
-    if skip_check_logs and not (export_commit_files or export_comments or export_commit_log):
+    if skip_check_logs and not (
+        export_commit_files or export_comments or export_commit_log or export_agent_sessions
+    ):
         raise ConfigurationError(
             "--skip-check-logs requires at least one export mode: --export-commit-files, "
-            "--export-comments or --export-commit-log (or PRINFO_EXPORT_COMMIT_FILES, "
-            "PRINFO_EXPORT_COMMENTS or PRINFO_EXPORT_COMMIT_LOG set to true)."
+            "--export-comments, --export-commit-log or --export-agent-sessions (or "
+            "PRINFO_EXPORT_COMMIT_FILES, PRINFO_EXPORT_COMMENTS, PRINFO_EXPORT_COMMIT_LOG "
+            "or PRINFO_EXPORT_AGENT_SESSIONS set to true)."
         )
     gh_host = _resolve_str(args.gh_host, env_values.get("PRINFO_GH_HOST")) or "github.com"
     gh_token = _resolve_str(args.gh_token, env_values.get("PRINFO_GH_TOKEN"))
@@ -80,6 +88,7 @@ def resolve_config(args, environ: Mapping[str, str] | None = None) -> AppConfig:
         export_commit_files=export_commit_files,
         export_comments=export_comments,
         export_commit_log=export_commit_log,
+        export_agent_sessions=export_agent_sessions,
         skip_check_logs=skip_check_logs,
         env_file=env_file,
         gh_host=gh_host,

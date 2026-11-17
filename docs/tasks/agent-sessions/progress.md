@@ -24,12 +24,12 @@
 
 Requirements: REQ-1, REQ-8
 
-- [ ] Add `export_agent_sessions` to `AppConfig` and `resolve_config` with `PRINFO_EXPORT_AGENT_SESSIONS`
-- [ ] Accept the mode as a `--skip-check-logs` companion and update the error message
-- [ ] Add `--export-agent-sessions` to the parser and update `--skip-check-logs` help
-- [ ] Bump `pyproject.toml` to `0.5.0` and run `uv lock`
-- [ ] Config and CLI tests
-- [ ] Phase 1 verification
+- [x] Add `export_agent_sessions` to `AppConfig` and `resolve_config` with `PRINFO_EXPORT_AGENT_SESSIONS`
+- [x] Accept the mode as a `--skip-check-logs` companion and update the error message
+- [x] Add `--export-agent-sessions` to the parser and update `--skip-check-logs` help
+- [x] Bump `pyproject.toml` to `0.5.0` and run `uv lock` (also `src/prinfo/__init__.py`, see `notes.md` D1 and `solution_01.md`)
+- [x] Config and CLI tests
+- [x] Phase 1 verification
 
 ## Phase 2: Copilot API client and gh helpers
 

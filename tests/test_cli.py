@@ -50,6 +50,21 @@ def test_build_parser_supports_commit_log_export_flag() -> None:
     assert args.export_commit_log is True
 
 
+def test_build_parser_supports_agent_sessions_export_flag() -> None:
+    parser = build_parser()
+
+    args = parser.parse_args(["--pr", "123", "--export-agent-sessions"])
+
+    assert args.export_agent_sessions is True
+
+
+def test_build_parser_help_mentions_agent_sessions_flag() -> None:
+    help_text = " ".join(build_parser().format_help().split())
+
+    assert "--export-agent-sessions" in help_text
+    assert "--export-commit-log or --export-agent-sessions" in help_text
+
+
 def test_build_parser_supports_both_new_export_flags() -> None:
     parser = build_parser()
 
@@ -376,14 +391,14 @@ def test_main_shares_one_commit_cache_between_commit_modes(
 
 
 def test_version_reports_expected_release(capsys: pytest.CaptureFixture[str]) -> None:
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.5.0"
 
     parser = build_parser()
     with pytest.raises(SystemExit, match="0"):
         parser.parse_args(["--version"])
 
     captured = capsys.readouterr()
-    assert captured.out.strip() == "prinfo 0.4.0"
+    assert captured.out.strip() == "prinfo 0.5.0"
 
 
 def test_main_does_not_warn_when_every_commit_skip_is_benign(

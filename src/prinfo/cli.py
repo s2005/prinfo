@@ -74,11 +74,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--export-agent-sessions",
+        action="store_true",
+        help=(
+            "Export Copilot agent sessions (code review passes and coding-agent runs) for the PR "
+            "to agent-sessions/, with session metadata, raw log, transcript and review findings."
+        ),
+    )
+    parser.add_argument(
         "--skip-check-logs",
         action="store_true",
         help=(
-            "Skip PR check-log export. Use with --export-commit-files, --export-comments or "
-            "--export-commit-log."
+            "Skip PR check-log export. Use with --export-commit-files, --export-comments, "
+            "--export-commit-log or --export-agent-sessions."
         ),
     )
     parser.add_argument(

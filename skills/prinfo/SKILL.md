@@ -1,14 +1,15 @@
 ---
 name: prinfo
-description: Use this skill when the user wants to run, troubleshoot, or interpret the prinfo CLI for GitHub pull request checks. Activate for requests about exporting PR check logs, GitHub Actions job logs, manifest.json, skipped checks, gh authentication context, prinfo command arguments and env-file settings, PR comments, review threads, resolved state, comments.json, comments.md, or commit-log.json.
+description: Use this skill when the user wants to run, troubleshoot, or interpret the prinfo CLI for GitHub pull request checks. Activate for requests about exporting PR check logs, GitHub Actions job logs, manifest.json, skipped checks, gh authentication context, prinfo command arguments and env-file settings, PR comments, review threads, resolved state, comments.json, comments.md, commit-log.json, or Copilot agent sessions
+(agent-sessions/, agent-sessions.json, transcript.md, findings.json).
 ---
 
 # prinfo Skill
 
 Run and interpret `prinfo`, a Python CLI that exports GitHub pull request
 check logs through the GitHub CLI and can also export PR commit files into
-per-commit folders, export the PR review discussion, and export the commit
-log.
+per-commit folders, export the PR review discussion, export the commit
+log, and export Copilot agent sessions.
 
 ## Use This Skill When
 
@@ -17,11 +18,13 @@ log.
 - Export the PR review discussion (issue comments, review comments, reviews,
   and review-thread resolved state) for a specific pull request.
 - Export the PR commit log for a specific pull request.
+- Export the Copilot agent sessions (code review passes and coding-agent
+  runs) for a specific pull request.
 - Build the right `prinfo` command for a repo, PR number, or auth context.
 - Troubleshoot missing logs, skipped checks, or `gh` authentication problems.
 - Explain the files written by `prinfo`, especially `manifest.json`,
   `commits-manifest.json`, per-commit `_commit.json` files, `comments.json`,
-  `comments.md`, and `commit-log.json`.
+  `comments.md`, `commit-log.json`, and the `agent-sessions/` folder.
 
 ## Quick Workflow
 
@@ -39,17 +42,21 @@ log.
 6. Decide whether commit export is needed with `--export-commit-files`.
 7. Decide whether the PR review discussion is needed with `--export-comments`.
 8. Decide whether the commit log alone is needed with `--export-commit-log`.
-9. If any export mode is requested, decide whether the user wants an
+9. Decide whether Copilot agent sessions are needed with
+   `--export-agent-sessions`.
+10. If any export mode is requested, decide whether the user wants an
    export-only run with `--skip-check-logs`.
-10. Run `uv run prinfo ...` from this repository when possible.
-11. Inspect `manifest.json`, `commits-manifest.json`, exported logs,
+11. Run `uv run prinfo ...` from this repository when possible.
+12. Inspect `manifest.json`, `commits-manifest.json`, exported logs,
     per-commit folders, `comments.json`, `comments.md`, `commit-log.json`,
-    and skipped entries.
-12. Explain any failure in one of these buckets:
+    `agent-sessions/agent-sessions.json`, and skipped entries.
+13. Explain any failure in one of these buckets:
     configuration, repository resolution, PR checks not found, unsupported
     checks, log download failure, commit listing failure, commit file
     download failure, a skipped comment source, a failed GraphQL
-    review-thread call, or no export mode producing a result.
+    review-thread call, an agent session mode skip (`unsupported_host`,
+    `no_copilot_access`, `no_sessions_endpoint`), a skipped agent session, a
+    `gh auth token` failure, or no export mode producing a result.
 
 ## Critical Constraints
 
@@ -67,8 +74,15 @@ log.
 - Review-thread resolved state comes from a GraphQL call and may be absent;
   when it fails, every review comment is left with `is_resolved` unset.
 - `--export-commit-log` downloads no file content, only commit metadata.
+- `--export-agent-sessions` uses undocumented Copilot API endpoints that may
+  change; the raw `log.sse` is kept for that reason. Only `github.com` and
+  `<tenant>.ghe.com` hosts are supported; any other host is skipped as
+  `unsupported_host` with no HTTP call.
+- The agent session token comes from `--gh-token` or `PRINFO_GH_TOKEN`, else
+  `gh auth token --hostname <host>`. It is never written or logged.
 - `--skip-check-logs` needs at least one export mode
-  (`--export-commit-files`, `--export-comments`, or `--export-commit-log`).
+  (`--export-commit-files`, `--export-comments`, `--export-commit-log`, or
+  `--export-agent-sessions`).
 
 ## Working Rules
 
@@ -87,6 +101,8 @@ log.
   per-commit `_commit.json` manifest before guessing.
 - If the user asks why a comment export looks incomplete, inspect
   `skipped_sources` in `comments.json` before concluding the export failed.
+- If the user asks why agent sessions are missing, inspect `mode_skip` and
+  `skipped_sessions` in `agent-sessions.json` first.
 - If the user wants commit history rather than file content, choose
   `--export-commit-log` over `--export-commit-files`.
 

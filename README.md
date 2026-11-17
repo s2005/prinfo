@@ -3,7 +3,7 @@
 `prinfo` is a cross-platform Python CLI that uses GitHub CLI (`gh`) to
 export pull request check logs into a local folder. It can also export the
 files touched by each PR commit into per-commit folders, export the PR review
-discussion, and export the commit log. The current implementation focuses on
+discussion, export the commit log, and export Copilot agent sessions. The current implementation focuses on
 GitHub-backed PR metadata and writes manifests for all export modes.
 
 This repository also includes an Agent Skill for running, troubleshooting,
@@ -73,6 +73,13 @@ To export only the commit log and skip PR check logs:
 uv run prinfo --repo owner/repo --pr 123 --export-commit-log --skip-check-logs
 ```
 
+To export only the Copilot agent sessions (code review passes and coding-agent
+runs) and skip PR check logs:
+
+```bash
+prinfo --repo OWNER/REPO --pr 123 --export-agent-sessions --skip-check-logs
+```
+
 You can also load configuration from an env file:
 
 ```bash
@@ -87,6 +94,7 @@ Supported env-file keys:
 - `PRINFO_EXPORT_COMMIT_FILES`
 - `PRINFO_EXPORT_COMMENTS`
 - `PRINFO_EXPORT_COMMIT_LOG`
+- `PRINFO_EXPORT_AGENT_SESSIONS`
 - `PRINFO_SKIP_CHECK_LOGS`
 - `PRINFO_GH_HOST`
 - `PRINFO_GH_TOKEN`
@@ -130,6 +138,7 @@ The command writes:
   summaries, and why each skipped file was skipped
 - optional `comments.json` and `comments.md` when `--export-comments` is enabled
 - optional `commit-log.json` when `--export-commit-log` is enabled
+- optional `agent-sessions/` folder when `--export-agent-sessions` is enabled
 
 Checks that are not backed by GitHub Actions jobs are skipped and
 recorded in the manifest under the reason code `unsupported_check_type`. That
@@ -147,9 +156,9 @@ When `--export-commit-files` is enabled, commit export still runs even if the
 PR has no downloadable Actions logs. Removed files are recorded in commit
 metadata as skipped because they cannot be downloaded at the target commit SHA.
 
-`--skip-check-logs` requires at least one of the three export modes
-(`--export-commit-files`, `--export-comments`, `--export-commit-log`) and
-skips only the check-log export.
+`--skip-check-logs` requires at least one of the four export modes
+(`--export-commit-files`, `--export-comments`, `--export-commit-log`,
+`--export-agent-sessions`) and skips only the check-log export.
 
 Each requested export mode runs independently, so one mode failing does not
 stop the others, and the command fails only when no mode produced a result.
@@ -173,6 +182,92 @@ Each commit record carries both the git author and the git committer, which
 differ after a rebase or a squash merge; `author_login` and `committer_login`
 are the corresponding GitHub accounts and are `null` when the commit email
 matches no GitHub user.
+
+### Agent sessions
+
+`--export-agent-sessions` exports the Copilot agent sessions linked to the PR:
+code review passes and coding-agent runs. It writes an `agent-sessions/`
+folder inside the output directory:
+
+```text
+agent-sessions/
+  agent-sessions.json
+  <session_id>/
+    session.json
+    log.sse
+    transcript.md
+    findings.json
+```
+
+`findings.json` is written only when the session log holds `store_comment`
+calls.
+
+> The Copilot API endpoints behind this mode are undocumented and may change
+> without notice. `log.sse`, the raw event-stream log, is kept unchanged for
+> that reason, so nothing is lost when the parser misses a changed event
+> shape.
+
+`agent-sessions.json` is the manifest. Its keys are `repo`, `pr_number`,
+`copilot_api_host`, `mode_skip`, `sessions`, `skipped_sessions`, and
+`counts` (`listed`, `exported`, `skipped`, `findings`). Each `sessions` entry
+holds the curated session fields plus `files` (the relative paths of
+`session.json`, `log.sse`, `transcript.md`, and `findings.json`, the last
+`null` when no findings file was written), `findings_count`,
+`unparsed_events` (log events that could not be parsed and were left out of
+the transcript), and `log_bytes`. Each `skipped_sessions` entry holds
+`session_id`, `reason_code`, and `reason`.
+
+`session.json` is curated rather than a copy of the API response. It keeps
+only `id`, `name`, `agent_slug`, `event_type`, `state`, `created_at`,
+`completed_at`, `last_updated_at`, `model`, `head_ref`, `base_ref`,
+`workflow_run_id`, and `error`, plus `review_pass`, `head_sha`,
+`last_reviewed_head_revision`, and `review_effort_level` when the session
+carries them. Identifying fields (user login, user ids, request ids, access
+type, and settings) are dropped.
+
+Each finding in `findings.json` is one `store_comment` call and carries
+`type`, `path`, `start_line`, `end_line`, `body`, `suggested_fix`,
+`fix_skip_reason`, `fix_skip_note`, `fixed`, and `extra` (any other
+`store_comment` argument, kept rather than dropped).
+
+`transcript.md` lists the assistant text and the tool calls of the session in
+order, with numbered headings. Tool-call arguments longer than 4000
+characters are truncated, and the transcript says how many characters were
+shown.
+
+The Copilot API host is derived from the repository host, which defaults to
+`--gh-host`:
+
+| Repository host | Copilot API host |
+| --------------- | ---------------- |
+| `github.com` | `api.githubcopilot.com` |
+| `<tenant>.ghe.com` | `copilot-api.<tenant>.ghe.com` |
+| anything else | none; the mode is skipped as `unsupported_host` and no HTTP call is made |
+
+The token comes from `--gh-token` / `PRINFO_GH_TOKEN` when set. Otherwise
+`prinfo` runs `gh auth token --hostname <host>`, honouring `--gh-config-dir`.
+The token is never written to disk or logged.
+
+Skip reasons come at two levels. A mode skip stops the whole mode, is
+recorded under `mode_skip` in the manifest, and is logged at `WARNING`:
+
+- `unsupported_host` - the repository host has no known Copilot API host
+- `no_copilot_access` - the sessions request returned HTTP 401 or 403
+- `no_sessions_endpoint` - the sessions request returned HTTP 404
+
+A per-session skip is recorded in `skipped_sessions` while the other sessions
+still export:
+
+- `metadata_unavailable` - the session metadata could not be fetched; logged
+  at `WARNING`
+- `log_unavailable` - the session log could not be fetched; logged at
+  `WARNING`
+- `invalid_session_id` - the session id cannot be used as a folder name;
+  normal, logged at `INFO`
+
+Any other failure while listing sessions fails the mode, and the other
+requested modes continue. The mode also fails when sessions were listed but
+every one of them failed to export.
 
 ## Skill
 

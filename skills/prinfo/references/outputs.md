@@ -10,6 +10,7 @@
 - `comments.json`, produced by `--export-comments`
 - `comments.md`, produced by `--export-comments`
 - `commit-log.json`, produced by `--export-commit-log`
+- `agent-sessions/`, produced by `--export-agent-sessions`
 
 When `--skip-empty-logs` is used, empty logs are still recorded in
 `manifest.json` but no zero-byte `.log` file is written for them.
@@ -195,6 +196,77 @@ instead of guessing. A `review_threads` entry means resolved state is simply
 unavailable for that run, while the REST comments (issue comments, review
 comments, and reviews) still exported.
 
+## Agent sessions structure
+
+`--export-agent-sessions` writes an `agent-sessions/` folder:
+
+```text
+agent-sessions/
+  agent-sessions.json
+  <session_id>/
+    session.json
+    log.sse
+    transcript.md
+    findings.json
+```
+
+`findings.json` exists only when the log holds `store_comment` calls. The
+Copilot API endpoints are undocumented and may change, so the raw `log.sse`
+is kept unchanged next to the parsed files.
+
+`agent-sessions.json` has seven top-level keys:
+
+- `repo`
+- `pr_number`
+- `copilot_api_host`
+- `mode_skip`
+- `sessions`
+- `skipped_sessions`
+- `counts`
+
+`copilot_api_host` is `api.githubcopilot.com` for `github.com`,
+`copilot-api.<tenant>.ghe.com` for `<tenant>.ghe.com`, and `null` for any
+other host. `mode_skip` is `null` or an object with `reason_code` and
+`reason`. `counts` holds `listed`, `exported`, `skipped`, and `findings`.
+
+Each `sessions` entry carries the curated session fields plus `files`
+(`session`, `log`, `transcript`, `findings`; `findings` is `null` when no
+findings file was written), `findings_count`, `unparsed_events`, and
+`log_bytes`. Each `skipped_sessions` entry carries `session_id`,
+`reason_code`, and `reason`.
+
+`session.json` keeps only `id`, `name`, `agent_slug`, `event_type`, `state`,
+`created_at`, `completed_at`, `last_updated_at`, `model`, `head_ref`,
+`base_ref`, `workflow_run_id`, and `error`, plus `review_pass`, `head_sha`,
+`last_reviewed_head_revision`, and `review_effort_level` when present.
+Identifying fields (user login, user ids, request ids, access type,
+settings) are dropped.
+
+Each finding carries `type`, `path`, `start_line`, `end_line`, `body`,
+`suggested_fix`, `fix_skip_reason`, `fix_skip_note`, `fixed`, and `extra`
+(any other `store_comment` argument, kept rather than dropped).
+
+`transcript.md` has numbered headings for assistant text and tool calls.
+Tool-call arguments over 4000 characters are truncated and a note gives the
+shown and total character counts. `unparsed_events` counts log events that
+could not be parsed.
+
+## How to explain a skipped agent session
+
+A `mode_skip` stops the whole mode and is logged at `WARNING`:
+
+- `unsupported_host` - the repository host has no Copilot API host; no HTTP
+  call was made
+- `no_copilot_access` - the sessions request returned HTTP 401 or 403
+- `no_sessions_endpoint` - the sessions request returned HTTP 404
+
+A `skipped_sessions` entry affects one session:
+
+- `metadata_unavailable` and `log_unavailable` - the Copilot API failed to
+  serve a listed session. Worth investigating; logged at `WARNING`.
+- `invalid_session_id` - the id cannot be used as a folder name. Normal, not
+  actionable; logged at `INFO`.
+
 ## When the command fails instead of writing output
 
 Expect the command to fail when:
@@ -203,6 +275,9 @@ Expect the command to fail when:
 - checks exist, but none expose downloadable job logs
 - every comment source failed during `--export-comments`
 - the PR has no commits during `--export-commit-log`
+- sessions were listed but none could be exported during
+  `--export-agent-sessions`, or listing sessions failed with an error other
+  than a mode skip
 
 In that case, explain the failure and suggest the next verification step, such
 as checking whether the PR relies on external CI instead of GitHub Actions.

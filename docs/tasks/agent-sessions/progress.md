@@ -70,9 +70,9 @@ Requirements: REQ-2, REQ-4, REQ-6, REQ-3
 
 Requirements: REQ-7, REQ-2, REQ-3, REQ-5
 
-- [ ] README option, env key, outputs, host mapping, skip reasons, undocumented-endpoint note
-- [ ] `skills/prinfo/SKILL.md`
-- [ ] `skills/prinfo/references/commands.md`, `outputs.md`, `troubleshooting.md`
-- [ ] Markdown lint
-- [ ] Manual run against a real PR with Copilot review sessions
-- [ ] Phase 5 verification
+- [x] README option, env key, outputs, host mapping, skip reasons, undocumented-endpoint note
+- [x] `skills/prinfo/SKILL.md`
+- [x] `skills/prinfo/references/commands.md`, `outputs.md`, `troubleshooting.md`
+- [x] Markdown lint
+- [x] Manual run against a real PR with Copilot review sessions (known gap accepted by the user; only a github.com empty-list run was done, see `notes_01.md`)
+- [x] Phase 5 verification

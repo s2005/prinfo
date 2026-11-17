@@ -108,14 +108,14 @@ Action:
 
 Symptom:
 
-- a configuration error names `--export-commit-files`, `--export-comments`
-  and `--export-commit-log` and their three env keys
+- a configuration error names `--export-commit-files`, `--export-comments`,
+  `--export-commit-log` and `--export-agent-sessions` and their env keys
 
 Action:
 
 - `--skip-check-logs` only suppresses the check-log export, it is not an
   export mode on its own
-- add at least one of the three export flags, or set the matching env key
+- add at least one of the four export flags, or set the matching env key
 
 ## A comment source was skipped
 
@@ -186,6 +186,53 @@ Action:
   commits
 - `--export-commit-log` downloads no file content, so a failure here is
   about the commit listing and not about file downloads
+
+## Agent session export was skipped for the whole mode
+
+Symptom:
+
+- a warning says the agent session export was skipped, and `mode_skip` in
+  `agent-sessions/agent-sessions.json` holds a `reason_code`
+
+Action:
+
+- `unsupported_host` - the repository host is neither `github.com` nor
+  `<tenant>.ghe.com`, so there is no Copilot API host and no request was made;
+  nothing to fix on the `prinfo` side
+- `no_copilot_access` - the Copilot API answered HTTP 401 or 403; the token
+  has no Copilot access for that host, so rerun with an account that has it
+  (`--gh-token`, `PRINFO_GH_TOKEN` or `--gh-config-dir`)
+- `no_sessions_endpoint` - the Copilot API answered HTTP 404; the endpoint is
+  undocumented and may have changed or be missing for that tenant
+
+## An agent session was skipped
+
+Symptom:
+
+- `skipped_sessions` in `agent-sessions.json` has entries while other
+  sessions exported
+
+Action:
+
+- `metadata_unavailable` and `log_unavailable` mean the Copilot API failed to
+  serve a listed session; read `reason`, then retry the run
+- `invalid_session_id` is normal and not actionable: the id cannot be used as
+  a folder name
+- if every listed session failed, the mode fails and the manifest names the
+  reasons
+
+## gh auth token failed for agent sessions
+
+Symptom:
+
+- the agent session export fails with an error from `gh auth token`
+
+Action:
+
+- unless `--gh-token` or `PRINFO_GH_TOKEN` is set, `prinfo` runs
+  `gh auth token --hostname <host>`, honouring `--gh-config-dir`
+- run `gh auth login --hostname <host>` for that host, or pass `--gh-token`
+- the token is never written to disk or logged
 
 ## Some export modes succeeded and others failed
 

@@ -135,10 +135,10 @@ The feature can be accepted when all items are true:
 - [x] AC-1 - the flag and the env key enable the mode, and `--skip-check-logs --export-agent-sessions` is accepted - verified by: Phase 1 tests
 - [x] AC-2 - two sessions are exported in `created_at` order, and an empty PR yields `sessions: []` - verified by: Phase 4 tests
 - [x] AC-3 - host mapping is correct for `github.com`, `<tenant>.ghe.com` and an Enterprise Server host, and the last makes no HTTP call - verified by: Phase 2 and Phase 4 tests
-- [ ] AC-4 - the sentinel token is absent from logs, errors and written files - verified by: Phase 2 and Phase 4 tests, and the manual token check
+- [x] AC-4 - the sentinel token is absent from logs, errors and written files - verified by: Phase 2 and Phase 4 tests, and the manual token check
 - [x] AC-5 - curated `session.json` and manifest, and byte-identical `log.sse` - verified by: Phase 3 and Phase 4 tests
 - [x] AC-6 - transcript order and `findings.json` match the fixture, and no `findings.json` is written without findings - verified by: Phase 3 tests
 - [x] AC-7 - 401, 403 and 404 skip reason codes, per-session skip, all sessions failing raises, and other modes are unaffected - verified by: Phase 4 tests
-- [ ] AC-8 - README and the bundled skill document the mode, and markdown lint passes - verified by: Phase 5 lint and review
+- [x] AC-8 - README and the bundled skill document the mode, and markdown lint passes - verified by: Phase 5 lint and review
 - [x] AC-9 - `uv run prinfo --version` prints `prinfo 0.5.0` - verified by: Phase 1 verification
-- [ ] AC-10 - the manual run writes the manifest, the session folders and a non-empty `findings.json` - verified by: Phase 5 manual run
+- [ ] AC-10 - the manual run writes the manifest, the session folders and a non-empty `findings.json` - verified by: Phase 5 manual run (not run; known gap, see `notes_01.md`)

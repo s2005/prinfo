@@ -57,6 +57,16 @@ without check logs:
 uv run prinfo --repo owner/repo --pr 123 --export-commit-log --skip-check-logs
 ```
 
+## Export Copilot agent sessions only
+
+Use this when the user wants the Copilot agent sessions (code review passes
+and coding-agent runs) and no check logs. Works on GitHub.com and on
+`<tenant>.ghe.com` hosts:
+
+```bash
+uv run prinfo --repo HOST/OWNER/REPO --gh-host HOST --pr N --export-agent-sessions --skip-check-logs
+```
+
 ## Export both commit modes in one run
 
 Use this when the user wants commit metadata and per-commit files together.
@@ -69,11 +79,11 @@ uv run prinfo --repo owner/repo --pr 123 --export-commit-files --export-commit-l
 
 ## Full export with all modes together
 
-Use this when the user wants check logs, commit files, comments, and the
-commit log in a single run:
+Use this when the user wants check logs, commit files, comments, the
+commit log, and agent sessions in a single run:
 
 ```bash
-uv run prinfo --repo owner/repo --pr 123 --export-commit-files --export-comments --export-commit-log
+uv run prinfo --repo owner/repo --pr 123 --export-commit-files --export-comments --export-commit-log --export-agent-sessions
 ```
 
 ## Environment file driven run
@@ -95,6 +105,7 @@ Supported keys:
 - `PRINFO_LOG_LEVEL`
 - `PRINFO_EXPORT_COMMENTS`
 - `PRINFO_EXPORT_COMMIT_LOG`
+- `PRINFO_EXPORT_AGENT_SESSIONS`
 - `PRINFO_EXPORT_COMMIT_FILES`
 - `PRINFO_SKIP_CHECK_LOGS`
 

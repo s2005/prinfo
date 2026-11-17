@@ -35,13 +35,13 @@ Requirements: REQ-1, REQ-8
 
 Requirements: REQ-3
 
-- [ ] `copilot_api_base_url` host mapping
-- [ ] `CopilotApiError` with token-free messages
-- [ ] `CopilotApiClient` with injectable opener and lazy token provider
-- [ ] `GhCli.get_pull_request_id`
-- [ ] `GhCli.auth_token`
-- [ ] `tests/test_copilot.py` and `tests/test_gh.py` additions
-- [ ] Phase 2 verification
+- [x] `copilot_api_base_url` host mapping
+- [x] `CopilotApiError` with token-free messages
+- [x] `CopilotApiClient` with injectable opener and lazy token provider
+- [x] `GhCli.get_pull_request_id`
+- [x] `GhCli.auth_token` (optional `host` keyword, see `notes.md` D3)
+- [x] `tests/test_copilot.py` and `tests/test_gh.py` additions
+- [x] Phase 2 verification
 
 ## Phase 3: Session log parser
 

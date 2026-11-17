@@ -286,6 +286,33 @@ class GhCli:
 
         return CommitDetails(commit=commit, files=files)
 
+    def get_pull_request_id(self, repo: str, pr_number: int) -> int:
+        repo_ref = parse_repo_ref(repo, self.gh_host)
+        data = self._run_json(
+            [
+                "api",
+                "--hostname",
+                repo_ref.host,
+                "-H",
+                "Accept: application/vnd.github+json",
+                f"repos/{repo_ref.owner}/{repo_ref.name}/pulls/{pr_number}",
+            ]
+        )
+        pr_id = _optional_int(data.get("id"))
+        if pr_id is None:
+            raise GhCliError(f"GitHub did not return a database id for pull request {pr_number}.")
+        return pr_id
+
+    def auth_token(self, host: str | None = None) -> str:
+        explicit_token = self.env_overrides.get("GH_TOKEN")
+        if explicit_token:
+            return explicit_token
+        target_host = host or self.gh_host
+        token = self._run_text(["auth", "token", "--hostname", target_host]).strip()
+        if not token:
+            raise GhCliError(f"gh auth token returned no token for host {target_host}.")
+        return token
+
     def download_job_log(self, repo: RepoRef, job_id: int) -> str:
         command = [
             "api",

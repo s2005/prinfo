@@ -442,3 +442,67 @@ def test_list_pr_review_threads_returns_empty_list_for_blank_output() -> None:
     threads = client.list_pr_review_threads("octo/repo", 1)
 
     assert threads == []
+
+
+def _recording_runner(stdout: bytes, calls: list[list[str]]):
+    def runner(*args, **kwargs):
+        calls.append(list(args[0]))
+        return subprocess.CompletedProcess(args[0], 0, stdout=stdout, stderr=b"")
+
+    return runner
+
+
+def test_get_pull_request_id_parses_id_and_passes_command() -> None:
+    calls: list[list[str]] = []
+    client = GhCli(runner=_recording_runner(b'{"id": 987654321, "number": 7}', calls))
+
+    assert client.get_pull_request_id("octo/repo", 7) == 987654321
+    assert calls == [
+        [
+            "gh",
+            "api",
+            "--hostname",
+            "github.com",
+            "-H",
+            "Accept: application/vnd.github+json",
+            "repos/octo/repo/pulls/7",
+        ]
+    ]
+
+
+def test_get_pull_request_id_raises_when_id_missing() -> None:
+    client = GhCli(runner=_recording_runner(b'{"number": 7}', []))
+
+    with pytest.raises(GhCliError, match="database id"):
+        client.get_pull_request_id("octo/repo", 7)
+
+
+def test_auth_token_prefers_explicit_token_without_running_gh() -> None:
+    calls: list[list[str]] = []
+    client = GhCli(gh_token="explicit-token", runner=_recording_runner(b"other\n", calls))
+
+    assert client.auth_token() == "explicit-token"
+    assert calls == []
+
+
+def test_auth_token_falls_back_to_gh_auth_token_with_default_host() -> None:
+    calls: list[list[str]] = []
+    client = GhCli(gh_host="example.ghe.com", runner=_recording_runner(b"tok-123\n", calls))
+
+    assert client.auth_token() == "tok-123"
+    assert calls == [["gh", "auth", "token", "--hostname", "example.ghe.com"]]
+
+
+def test_auth_token_uses_host_argument() -> None:
+    calls: list[list[str]] = []
+    client = GhCli(runner=_recording_runner(b"tok-123\n", calls))
+
+    assert client.auth_token("other.ghe.com") == "tok-123"
+    assert calls == [["gh", "auth", "token", "--hostname", "other.ghe.com"]]
+
+
+def test_auth_token_raises_on_empty_output() -> None:
+    client = GhCli(runner=_recording_runner(b"  \n", []))
+
+    with pytest.raises(GhCliError, match="no token for host github.com"):
+        client.auth_token()
